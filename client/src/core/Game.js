@@ -377,7 +377,17 @@ export class Game {
     if (!this.session.online) this.commentary.update(dt, events);
     const me = byId.get(view.localId);
     const opp = me && me.target != null ? byId.get(me.target) : null;
-    this.camera.update(dt, { me, opp, look });
+    if (view.match.phase === 'intro') {
+      // broadcast intro: cut between the wrestlers while the bell is about to ring
+      const order = view.fighters.filter((f) => !f.hidden && f.state !== 'apron');
+      const t = this.introT = (this.introT || 0) + dt;
+      const idx = Math.min(order.length - 1, Math.floor(t / (3.0 / Math.max(1, order.length))));
+      const f = order[idx];
+      if (f) this.camera.update(dt, { menu: { kind: 'showcase', subject: { x: f.x, y: f.y, z: f.z, height: f.c.height }, angle: f.yaw + 0.35 } });
+    } else {
+      this.introT = 0;
+      this.camera.update(dt, { me, opp, look });
+    }
     this.ui.updateHud(view, { netText: this.session.online ? `PING ${Math.round(this.net.rtt)} ms · ${Math.round(this.renderer.fps)} FPS` : `${Math.round(this.renderer.fps)} FPS` });
     if (me) this.ui.prompt(this.prompts(me, view));
     if (!this.session.online && view.match.phase === 'over' && !this.resultsShown) {
