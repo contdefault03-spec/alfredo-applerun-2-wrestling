@@ -96,15 +96,19 @@ export class GeminiProvider {
   async tts(text, speaker = 0, clientKey = 'anon') {
     if (!this.ttsEnabled || this.breakerOpen()) return null;
     speaker = Math.max(0, Math.min(2, speaker | 0));
-    const key = speaker + '|' + text;
+    // Only ever voice the line itself – never the voice-direction/stage notes.
+    // (A long style prefix used to leak into the audio: "Make it sound like a
+    //  ring announcer... AND THE WINNER IS...". sanitizeSpoken() + a short
+    //  directive kill that.)
+    const spoken = sanitizeSpoken(text);
+    if (!spoken) return null;
+    const key = speaker + '|' + spoken;
     if (this.ttsCache.has(key)) return this.ttsCache.get(key); // every client in a room asks for the same line
     if (!this.ttsLimiter.allow(clientKey)) return null;
-    const style = speaker === 2
-      ? 'Say this like a booming, larger-than-life professional wrestling ring announcer, drawing out the names'
-      : speaker === 1 ? 'Say this like a witty, opinionated wrestling colour commentator' : 'Say this like an excited live pro-wrestling play-by-play commentator';
+    const style = voiceStyleFor(speaker);
     const p = (async () => {
       const j = await this.callWithFallback('tts', () => ({
-        contents: [{ parts: [{ text: `${style}: ${String(text).slice(0, 220)}` }] }],
+        contents: [{ parts: [{ text: `${style}: ${spoken.slice(0, 220)}` }] }],
         generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: this.voices[speaker] } } } },
       }), 12000);
       const part = j.candidates?.[0]?.content?.parts?.find((x) => x.inlineData);
@@ -118,6 +122,42 @@ export class GeminiProvider {
     try { const buf = await p; if (!buf) this.ttsCache.delete(key); this.failures = 0; return buf; }
     catch (e) { this.ttsCache.delete(key); this.fail(e); return null; }
   }
+}
+
+// ── TTS text safety ─────────────────────────────────────────────────────────
+// The text-to-speech model must speak ONLY the announcer/commentary line, never
+// the voice-direction or any instruction that may have leaked into the text.
+
+/** Short, clean voice directive per speaker (0 play-by-play, 1 colour, 2 ring announcer). */
+export function voiceStyleFor(speaker) {
+  if (speaker === 2) return 'Speak in a deep, booming, authoritative older male professional wrestling ring announcer voice with huge arena projection';
+  if (speaker === 1) return 'Say this like a witty, opinionated wrestling colour commentator';
+  return 'Say this like an excited live pro-wrestling play-by-play commentator';
+}
+
+/**
+ * Strip any instruction / stage-direction / voice-direction so TTS only speaks
+ * the real line. Defends against leaks from upstream prompt text as well.
+ * @param {string} text
+ * @returns {string} the words that should actually be spoken
+ */
+export function sanitizeSpoken(text) {
+  let s = String(text ?? '');
+  // remove stage directions: (…), […], *…*, and <…> tags
+  s = s.replace(/\([^)]*\)/g, ' ').replace(/\[[^\]]*\]/g, ' ').replace(/\*[^*]*\*/g, ' ').replace(/<[^>]*>/g, ' ');
+  // strip whole leading label lines like "Voice: deep and slow\n", "Style: …", "Tone: …"
+  s = s.replace(/^\s*(?:voice|style|tone|instruction|direction|note|prompt|system)\s*:[^\n]*(?:\n+|$)/i, '');
+  // strip a leading voice-direction clause up to the first ':' – e.g.
+  // "Make it sound like a ring announcer:" / "Say this like …:" / "Read aloud …:"
+  s = s.replace(
+    /^\s*(?:please\s+)?(?:make (?:it|this) sound|say|read|announce|speak|voice|narrate|deliver|read aloud|say this|read this|in (?:a|an|the)|with (?:a|an|the)|like (?:a|an))\b[^:.!?]{0,120}:\s*/i,
+    '',
+  );
+  // collapse whitespace / strip wrapping quotes
+  s = s.replace(/\s+/g, ' ').replace(/^["'“”\s]+|["'“”\s]+$/g, '').trim();
+  // if sanitising removed everything, fall back to the trimmed original (never go silent on a real line)
+  if (!s) s = String(text ?? '').replace(/\s+/g, ' ').trim();
+  return s;
 }
 
 /** Wrap 16-bit mono PCM in a WAV header. */

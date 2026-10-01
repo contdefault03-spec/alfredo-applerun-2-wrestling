@@ -7,6 +7,7 @@ import { GAME_MODES } from '@shared/config/gameModes.js';
 import { ABILITIES } from '@shared/config/abilities.js';
 import { ITEMS } from '@shared/config/items.js';
 import { ARENA } from '@shared/config/arena.js';
+import { winnerAnnounceLine } from '@shared/config/entrances.js';
 import { S, BTN } from '@shared/sim/constants.js';
 import { Settings } from './Settings.js';
 import { Input } from './Input.js';
@@ -594,8 +595,8 @@ export class Game {
     }, 300 + i * 120));
     const winners = (e.winners || []).map((id) => byId.get(id)).filter(Boolean);
     const names = winners.map((f) => getCharacter(f.charId).name);
-    const how = { pinfall: 'by pinfall', ko: 'by knockout', decision: 'by decision' }[e.method] || '';
-    const line = names.length > 1 ? `Here are your winners, ${how}... ${names.join(' and ')}!` : `Here is your winner, ${how}... ${names[0] || 'nobody'}!`;
+    // "AND THE WINNER IS... RIZE!" – a clean, theatrical ring-announcer line.
+    const line = winnerAnnounceLine(names, e.method);
     setTimeout(() => {
       if (this.state !== 'match') return;
       const w0 = winners[0];
