@@ -96,6 +96,7 @@ export class Room {
       case 'removeAI': if (isHost && this.state === 'lobby') { this.ai.splice(msg.index | 0, 1); this.pushState(); } break;
       case 'start': if (isHost) { const err = this.startMatch(); if (err) this.send(p, { t: 'error', message: err }); } break;
       case 'backToLobby': if (isHost && this.state !== 'lobby') { this.stopMatch(); this.pushState(); } break;
+      case 'skipEntrance': if (this.world && p.fighterId != null) this.world.match.voteSkipEntrance(p.fighterId); break;
       case 'input': {
         if (!this.world || p.fighterId == null) break;
         const f = this.world.byId(p.fighterId);

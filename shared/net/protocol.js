@@ -49,10 +49,15 @@ export function encodeMatch(m) {
   return {
     p: m.phase, t: r2(m.timeLeft), w: m.winnerTeam, ws: m.winners, me: m.method,
     pin: m.pin ? [m.pin.pinner, m.pin.victim, m.pin.count] : null,
+    en: m.entranceState ? m.entranceState() : null,
   };
 }
 export function decodeMatch(o) {
-  return { phase: o.p, timeLeft: o.t, winnerTeam: o.w, winners: o.ws || [], method: o.me, pin: o.pin ? { pinner: o.pin[0], victim: o.pin[1], count: o.pin[2] } : null };
+  return {
+    phase: o.p, timeLeft: o.t, winnerTeam: o.w, winners: o.ws || [], method: o.me,
+    pin: o.pin ? { pinner: o.pin[0], victim: o.pin[1], count: o.pin[2] } : null,
+    entrance: o.en || null,
+  };
 }
 
 /** Full snapshot of a World (server side). */
