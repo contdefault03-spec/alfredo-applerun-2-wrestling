@@ -8,7 +8,7 @@ import { ABILITIES } from '@shared/config/abilities.js';
 import { ITEMS } from '@shared/config/items.js';
 import { ARENA } from '@shared/config/arena.js';
 import { winnerAnnounceLine } from '@shared/config/entrances.js';
-import { S, BTN } from '@shared/sim/constants.js';
+import { S, BTN, REF_GRAB_RANGE } from '@shared/sim/constants.js';
 import { Settings } from './Settings.js';
 import { Input } from './Input.js';
 import { AssetManager } from './AssetManager.js';
@@ -354,6 +354,12 @@ export class Game {
     const inp = this.input.sample(camYaw);
     let loud = this.crowd?.loudness() ?? 0.3;
     if (this.state === 'match' && this.session) {
+      // grab the interfering ref with E (consume the press so it isn't a normal grab)
+      if (this._canGrabRef && (inp.pressed & BTN.GRAB)) {
+        inp.pressed &= ~BTN.GRAB;
+        if (this.session.online) this.net.send({ t: 'grabRef' });
+        else this.session.world?.match?.grabReferee(this.session.localId);
+      }
       const is = this.inputState;
       is.mx = inp.mx; is.mz = inp.mz; is.held = inp.held; is.pressed |= inp.pressed;
       const pressedThisFrame = inp.pressed;
@@ -407,6 +413,7 @@ export class Game {
     this.itemViews.sync(view.items);
     this.referee.update(dt, view.referee);
     this.arena.updateRopes(dt, view.fighters);
+    this.arena.updateRingDamage(view.ring);
     const events = this.session.takeEvents();
     this.processEvents(events, byId, view);
     if (!this.session.online) this.commentary.update(dt, events);
@@ -428,7 +435,12 @@ export class Game {
       this.camera.update(dt, { me, opp, look });
     }
     this.ui.updateHud(view, { netText: this.session.online ? `PING ${Math.round(this.net.rtt)} ms · ${Math.round(this.renderer.fps)} FPS` : `${Math.round(this.renderer.fps)} FPS` });
-    if (me) this.ui.prompt(this.prompts(me, view));
+    // can the local wrestler grab the interfering referee?
+    const ref = view.referee;
+    this._canGrabRef = !!(me && ref && ref.state === 'warn' && ref.warnTarget === view.localId
+      && Math.hypot(ref.x - me.x, ref.z - me.z) <= REF_GRAB_RANGE);
+    if (this._canGrabRef) this.ui.prompt([{ key: 'E', text: 'GRAB REFEREE', hot: true }]);
+    else if (me) this.ui.prompt(this.prompts(me, view));
     if (!this.session.online && view.match.phase === 'over' && !this.resultsShown) {
       this.showResults({ winners: view.match.winners, method: view.match.method });
     }
