@@ -51,4 +51,12 @@ export const FALL_DEPTH = 1.7;         // how far below the canvas a hole drops 
 export const FALL_RECOVER = 2.4;       // seconds down in the hole before climbing out
 export const FALL_DAMAGE = 70;         // damage from crashing through the ring
 
+// Referee interference: if a wrestler keeps attacking a grounded opponent
+// instead of pinning, the ref steps in to stop it. He can then be grabbed.
+export const REF_WARN_HITS = 3;        // hits on a downed foe before the ref intervenes
+export const REF_HEAT_WINDOW = 3.5;    // seconds; ground-attack heat decays after this
+export const REF_WARN_TIME = 2.8;      // how long the ref keeps warning
+export const REF_DOWN_TIME = 5;        // seconds the ref is down after being grabbed
+export const REF_GRAB_RANGE = 2.0;     // how close a wrestler must be to grab the ref
+
 export const ZONE = { RING: 'ring', FLOOR: 'floor', APRON: 'apron' };

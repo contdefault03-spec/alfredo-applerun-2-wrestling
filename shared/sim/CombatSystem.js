@@ -1,7 +1,7 @@
 // CombatSystem – hitboxes vs hurt-capsules, blocking/parrying, damage,
 // reactions and knockback. Also used by abilities, items and grapples.
 import { ATTACKS } from '../config/attacks.js';
-import { S, DOWN_STATES, INVULN_STATES, ZONE } from './constants.js';
+import { S, DOWN_STATES, INVULN_STATES, ZONE, REF_HEAT_WINDOW } from './constants.js';
 import { setState, hurtCapsule, pointSegDist, scaleOf, forwardOf, hpFrac, wrapAngle } from './Fighter.js';
 
 export const REACTION_TIME = { flinch: 0.28, stagger: 0.6 };
@@ -138,6 +138,11 @@ export class CombatSystem {
     if (v.armor > 0 && reaction !== 'knockdown' && reaction !== 'launch') reaction = 'none';
     const alreadyDown = DOWN_STATES.has(v.state) || v.state === S.KNOCKDOWN;
     if (alreadyDown) reaction = v.state === S.KO ? 'none' : 'downhit';
+    // beating on a grounded opponent (instead of pinning) draws the referee in
+    if (alreadyDown && v.state !== S.KO && !spec.special) {
+      a.refHeat = (w.time - a.refHeatT < REF_HEAT_WINDOW ? a.refHeat : 0) + 1;
+      a.refHeatT = w.time;
+    }
 
     const wf = Math.sqrt(100 / v.c.weight) * (1 - resist * 0.8) * Math.pow(a.c.weight / 100, 0.25);
     const kb = (spec.knockback ?? 1) * wf;

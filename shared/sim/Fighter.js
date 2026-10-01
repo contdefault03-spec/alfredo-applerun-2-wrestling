@@ -29,6 +29,7 @@ export function createFighter({ id, charId, team = 0, name, isAI = false, diffic
     lastHitBy: null, lastHitTime: -99,
     eliminated: false, hidden: false,
     underRing: false, underRingT: 0, // fallen through a broken ring section
+    refHeat: 0, refHeatT: -99,       // "attacking a downed foe" heat for ref interference
     legal: true,             // tag-team legality
     input: { mx: 0, mz: 0, held: 0, pressed: 0, seq: 0 },
     aiState: null,           // AI brain (server/local only)

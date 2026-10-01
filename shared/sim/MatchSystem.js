@@ -3,7 +3,7 @@
 // the referee NPC (simulated so every client sees the same count).
 import { ARENA } from '../config/arena.js';
 import { getEntrance } from '../config/entrances.js';
-import { S, ZONE, DOWN_STATES } from './constants.js';
+import { S, ZONE, DOWN_STATES, REF_WARN_HITS, REF_HEAT_WINDOW, REF_WARN_TIME, REF_DOWN_TIME, REF_GRAB_RANGE } from './constants.js';
 import { setState, dist2D, isAlive, hpFrac, angleTo, turnToward } from './Fighter.js';
 
 const R = ARENA.ring;
@@ -23,7 +23,7 @@ export class MatchSystem {
     this.pin = null;
     this.winnerTeam = null; this.winners = []; this.method = null;
     this.elimOrder = [];
-    this.referee = { x: 0, y: R.height, z: -1.5, yaw: 0, zone: ZONE.RING, state: 'watch', count: 0, t: 0, focus: null };
+    this.referee = { x: 0, y: R.height, z: -1.5, yaw: 0, zone: ZONE.RING, state: 'watch', count: 0, t: 0, focus: null, warnTarget: null, warnT: 0, downT: 0 };
     // ── entrance state (authoritative; mirrored to clients in the snapshot) ──
     this.entranceOrder = [];      // fighter ids, in entry order
     this.entranceIndex = -1;      // -1 = not started yet
@@ -223,6 +223,7 @@ export class MatchSystem {
     if (!f || !v || f.state !== S.PIN || v.state !== S.PINNED) { this.endPin(false); return; }
     p.t += dt;
     const ref = this.referee;
+    if (ref.state === 'down') return; // no count while the ref is laid out
     if (!p.counting) {
       if (dist2D(ref, v) < 1.4 || p.t > 1.1) { p.counting = true; p.next = COUNT_INTERVAL * 0.6; ref.state = 'count'; ref.count = 0; }
       return;
@@ -333,12 +334,83 @@ export class MatchSystem {
     w.emit('match_end', { winnerTeam: team, winners: this.winners, method, ...detail });
   }
 
+  // ── referee interference ──
+  /** Decide whether the ref should step in (or keep stepping in). */
+  checkInterference(dt) {
+    const w = this.world, ref = this.referee;
+    if (this.phase !== 'live' || this.pin) {
+      if (ref.state === 'warn') { ref.state = 'watch'; ref.warnTarget = null; }
+      return;
+    }
+    if (ref.state === 'warn') {
+      ref.warnT -= dt;
+      const tgt = w.byId(ref.warnTarget);
+      if (!tgt || !isAlive(tgt) || tgt.hidden || ref.warnT <= 0) {
+        if (tgt) tgt.refHeat = 0;
+        ref.state = 'watch'; ref.warnTarget = null; ref.blocked = false;
+      }
+      return;
+    }
+    for (const f of w.fighters) {
+      if (f.hidden || f.eliminated || !isAlive(f)) continue;
+      if (f.refHeat >= REF_WARN_HITS && w.time - f.refHeatT < REF_HEAT_WINDOW) {
+        ref.state = 'warn'; ref.warnTarget = f.id; ref.warnT = REF_WARN_TIME; ref.blocked = false;
+        w.emit('ref_warn', { fighter: f.id });
+        break;
+      }
+    }
+  }
+
+  /**
+   * A wrestler grabs and slams the interfering referee. Only allowed while the
+   * ref is actively warning THAT wrestler and within range. Server-authoritative.
+   */
+  grabReferee(fighterId) {
+    const w = this.world, ref = this.referee;
+    if (this.phase !== 'live' || ref.state !== 'warn' || ref.warnTarget !== fighterId) return false;
+    const f = w.byId(fighterId);
+    if (!f || !isAlive(f) || f.hidden) return false;
+    if (Math.hypot(ref.x - f.x, ref.z - f.z) > REF_GRAB_RANGE) return false;
+    ref.state = 'down'; ref.downT = REF_DOWN_TIME; ref.warnTarget = null; ref.blocked = false;
+    f.refHeat = 0;
+    w.emit('ref_grabbed', { fighter: fighterId });
+    return true;
+  }
+
+  /** Is the given wrestler currently being warned and in range to grab the ref? */
+  canGrabReferee(fighterId) {
+    const ref = this.referee, f = this.world.byId(fighterId);
+    return ref.state === 'warn' && ref.warnTarget === fighterId && !!f
+      && Math.hypot(ref.x - f.x, ref.z - f.z) <= REF_GRAB_RANGE;
+  }
+
   // ── referee ──
   updateReferee(dt) {
     const w = this.world, ref = this.referee;
     ref.t += dt;
+    // knocked down after being grabbed – out of the match for a few seconds
+    if (ref.state === 'down') {
+      ref.downT -= dt;
+      ref.y += ((w.arena.isInsideRingSquare(ref.x, ref.z) ? R.height : 0) - ref.y) * Math.min(1, dt * 6);
+      if (ref.downT <= 0) { ref.state = 'watch'; ref.warnTarget = null; w.emit('ref_recover', {}); }
+      return;
+    }
+    this.checkInterference(dt);
     let tx = ref.x, tz = ref.z, speed = 2.4, face = null;
-    if (this.pin) {
+    if (ref.state === 'warn' && ref.warnTarget != null && !this.pin) {
+      const tgt = w.byId(ref.warnTarget);
+      if (tgt) {
+        tx = tgt.x + Math.sin(tgt.yaw) * 1.0; tz = tgt.z + Math.cos(tgt.yaw) * 1.0; speed = 6.0; face = tgt; ref.targetZone = tgt.zone;
+        if (Math.hypot(ref.x - tgt.x, ref.z - tgt.z) < 1.6 && !ref.blocked) {
+          ref.blocked = true;                       // physically stop the beat-down, once
+          if (!DOWN_STATES.has(tgt.state) && tgt.state !== S.KO) setState(tgt, S.HITSTUN, 0.45);
+          const aw = Math.atan2(tgt.x - ref.x, tgt.z - ref.z);
+          tgt.vx = Math.sin(aw) * 1.4; tgt.vz = Math.cos(aw) * 1.4;
+          tgt.refHeat = 0;
+          w.emit('ref_block', { fighter: tgt.id });
+        }
+      }
+    } else if (this.pin) {
       const v = w.byId(this.pin.victim);
       if (v) {
         const side = { x: v.x + Math.cos(v.yaw) * 0.9, z: v.z - Math.sin(v.yaw) * 0.9 };

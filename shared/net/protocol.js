@@ -10,7 +10,7 @@ export const PROTOCOL_VERSION = 3;
 const STATES = Object.values(S);
 const STATE_CODE = Object.fromEntries(STATES.map((s, i) => [s, i]));
 const ZONES = ['ring', 'floor', 'apron'];
-const REF_STATES = ['watch', 'count', 'slide', 'signal', 'raise'];
+const REF_STATES = ['watch', 'count', 'slide', 'signal', 'raise', 'warn', 'down'];
 
 const r3 = (v) => Math.round(v * 1000) / 1000;
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -42,8 +42,8 @@ export function decodeItem(a) {
   return { id: a[0], type: ITEM_IDS[a[1]], x: a[2], y: a[3], z: a[4], yaw: a[5], roll: a[6], holder: a[7] >= 0 ? a[7] : null, broken: !!a[8], upright: !!a[9] };
 }
 
-export function encodeReferee(r) { return [r3(r.x), r3(r.y), r3(r.z), r2(r.yaw), Math.max(0, REF_STATES.indexOf(r.state)), r.count || 0]; }
-export function decodeReferee(a) { return { x: a[0], y: a[1], z: a[2], yaw: a[3], state: REF_STATES[a[4]], count: a[5] }; }
+export function encodeReferee(r) { return [r3(r.x), r3(r.y), r3(r.z), r2(r.yaw), Math.max(0, REF_STATES.indexOf(r.state)), r.count || 0, r.warnTarget ?? -1]; }
+export function decodeReferee(a) { return { x: a[0], y: a[1], z: a[2], yaw: a[3], state: REF_STATES[a[4]], count: a[5], warnTarget: a[6] >= 0 ? a[6] : null }; }
 
 export function encodeMatch(m) {
   return {
