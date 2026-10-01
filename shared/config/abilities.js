@@ -11,9 +11,9 @@ export const ABILITIES = {
     lockTime: 0.4,                 // prepare/lock-on crouch
     airTime: 0.85, peakHeight: 4.2,
     recovery: 0.7,
-    damage: 290, radius: 1.5,      // crush radius at landing (target + anyone caught)
-    splashDamage: 70, splashRadius: 2.6,
-    knockback: 9, launch: 3.5, downTime: 3.2,
+    damage: 200, radius: 1.4,      // crush radius at landing (target + anyone caught)
+    splashDamage: 40, splashRadius: 2.2,
+    knockback: 7, launch: 3, downTime: 1.5,
     sound: 'assets/audio/Ajan.mp3',    // plays when the crush successfully lands
     hitEvent: 'AJAN_SPECIAL_HIT',
     camera: 'cinematic',

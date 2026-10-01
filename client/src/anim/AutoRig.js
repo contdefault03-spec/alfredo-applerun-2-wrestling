@@ -223,12 +223,32 @@ export function autoRig(srcMesh, rigCfg) {
       skinWeight[i * 4 + j] = val[j] / sum;
     }
   }
+  // optional detachable prop (e.g. Ajan's food bowl): its own bone so it can be scaled away
+  const boneList = BONE_NAMES.map((n) => bones[n]);
+  if (rig.prop) {
+    const sd = rig.prop.side || 'L', hi = boneIndex['hand_' + sd], li = boneIndex['lowerArm_' + sd];
+    const [cx, cy] = rig.prop.center, r2 = rig.prop.radius * rig.prop.radius;
+    const sel = []; const c = new THREE.Vector3();
+    for (let i = 0; i < N; i++) {
+      if (skinIndex[i * 4] !== hi && skinIndex[i * 4] !== li) continue;
+      const dx = pos.getX(i) - cx, dy = pos.getY(i) - cy;
+      if (dx * dx + dy * dy < r2) { sel.push(i); c.x += pos.getX(i); c.y += pos.getY(i); c.z += pos.getZ(i); }
+    }
+    if (sel.length > 20) {
+      c.multiplyScalar(1 / sel.length);
+      const pb = new THREE.Bone(); pb.name = 'prop_' + sd;
+      bones['hand_' + sd].add(pb); pb.position.copy(c).sub(J['hand_' + sd]);
+      bones[pb.name] = pb;
+      const pi = boneList.push(pb) - 1;
+      for (const i of sel) { skinIndex[i * 4] = pi; skinWeight[i * 4] = 1; skinWeight[i * 4 + 1] = skinWeight[i * 4 + 2] = skinWeight[i * 4 + 3] = 0; }
+    }
+  }
   geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndex, 4));
   geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeight, 4));
 
   const mesh = new THREE.SkinnedMesh(geometry, srcMesh.material);
   mesh.add(bones.hips);
-  const skeleton = new THREE.Skeleton(BONE_NAMES.map((n) => bones[n]));
+  const skeleton = new THREE.Skeleton(boneList);
   mesh.bind(skeleton);
   mesh.castShadow = true; mesh.receiveShadow = true;
   mesh.frustumCulled = false; // skinned bounds are unreliable when animating

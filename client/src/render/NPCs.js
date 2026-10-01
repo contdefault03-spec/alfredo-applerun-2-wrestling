@@ -162,3 +162,41 @@ export class Commentator extends Human {
     this.solve(dt, 12);
   }
 }
+
+/** Ring announcer in a tuxedo with a microphone: introduces the match and the winner. */
+export class Announcer extends Human {
+  constructor(scene) {
+    super(atlas(['#0b0b10', '#e0b48a', '#0b0b10', '#050505', '#3a2a1a', '#c0c0c0']), 1.8, { jacket: true });
+    scene.add(this.root);
+    this.home = { x: 1.9, y: 0, z: -6.4 };     // ringside near the timekeeper
+    this.pos = new THREE.Vector3(this.home.x, 0, this.home.z); this.yaw = 0;
+    this.target = { x: this.home.x, y: 0, z: this.home.z, yaw: 0 };
+    this.talkT = 0; this.prevPos = this.pos.clone();
+    const mic = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.012, 0.18, 8), new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.3 }));
+    mic.rotation.x = Math.PI / 2; mic.position.set(0, 0, 0.06);
+    const b = this.solver.b.hand_R; mic.scale.setScalar(1 / 1.8); mic.position.multiplyScalar(1 / 1.8); b.add(mic);
+  }
+  /** Walk to a spot (in the ring y = ring height). */
+  goTo(x, y, z, yaw) { this.target = { x, y, z, yaw }; }
+  goHome() { this.goTo(this.home.x, 0, this.home.z, 0); }
+  speak(seconds) { this.talkT = seconds; }
+  update(dt) {
+    this.time += dt; this.talkT = Math.max(0, this.talkT - dt);
+    const d = Math.hypot(this.target.x - this.pos.x, this.target.z - this.pos.z);
+    const step = Math.min(d, 2.6 * dt);
+    if (d > 0.02) { this.pos.x += (this.target.x - this.pos.x) / d * step; this.pos.z += (this.target.z - this.pos.z) / d * step; this.yaw = Math.atan2(this.target.x - this.pos.x, this.target.z - this.pos.z); }
+    else this.yaw += ((this.target.yaw ?? this.yaw) - this.yaw) * Math.min(1, dt * 4);
+    // climbs between floor and ring: height eases toward the ring when inside the apron square
+    const inRing = Math.abs(this.pos.x) < 3.6 && Math.abs(this.pos.z) < 3.6;
+    this.pos.y += ((inRing ? 1.2 : 0) - this.pos.y) * Math.min(1, dt * 5);
+    const speed = this.prevPos.distanceTo(this.pos) / Math.max(dt, 1e-3); this.prevPos.copy(this.pos);
+    this.root.position.copy(this.pos); this.root.rotation.y = this.yaw;
+    const t = this.tgt;
+    applyOverrides(t, RELAXED);
+    const g = Math.sin(this.time * 4);
+    set(t, 'handR', [-0.1, 0.55, 0.32]); set(t, 'elbowR', [0.8, -0.4, 0]); // mic at the mouth
+    if (this.talkT > 0) { set(t, 'handL', [0.45 + 0.2 * g, 0.2 + 0.35 * Math.max(0, g), 0.25]); add(t, 'head', [-0.15 + 0.06 * Math.sin(this.time * 11), 0, 0]); add(t, 'chest', [-0.1, 0, 0]); }
+    this.walk(t, speed, dt);
+    this.solve(dt, 14);
+  }
+}

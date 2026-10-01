@@ -42,11 +42,11 @@ export class ArenaView {
 
   // ── floor & mats ──
   buildFloor() {
-    const floor = add(this.group, new THREE.PlaneGeometry(90, 90).rotateX(-Math.PI / 2), std({ map: TX.floorTexture(), roughness: 0.9, metalness: 0.05 }), { cast: false });
+    const floor = add(this.group, new THREE.PlaneGeometry(90, 90).rotateX(-Math.PI / 2), std({ map: TX.floorTexture(), roughness: 0.55, metalness: 0.2 }), { cast: false });
     floor.position.y = -0.002;
     const B = ARENA.barricade;
     const matGeo = new THREE.PlaneGeometry(B.halfX * 2, B.halfZ * 2).rotateX(-Math.PI / 2);
-    add(this.group, matGeo, std({ map: TX.matTexture(), roughness: 0.85 }), { cast: false, pos: [0, 0.004, 0] });
+    add(this.group, matGeo, std({ map: TX.matTexture(), roughness: 0.62, metalness: 0.05 }), { cast: false, pos: [0, 0.004, 0] });
   }
 
   // ── ring ──
@@ -295,7 +295,7 @@ export class ArenaView {
       // front wall + LED ribbon board
       const front = sd.inner - 0.05;
       const board = TX.ledBoard(2048, 96);
-      board.draw(['RING KINGS', 'LIVE', 'WRESTLING', '★']);
+      board.draw(['ALFREDO APPLERUN 2', 'WRESTLING', 'LIVE', '★']);
       const bm = new THREE.MeshBasicMaterial({ map: board.texture, toneMapped: false });
       board.texture.repeat.set(len / 12, 1);
       const bg = new THREE.PlaneGeometry(len, 0.5);
@@ -333,6 +333,11 @@ export class ArenaView {
     key.shadow.bias = -0.0004; key.shadow.normalBias = 0.03;
     key.shadow.radius = 3;
     sc.add(key, key.target);
+    // cool rim/back light: separates the wrestlers from the dark arena (no shadow cost)
+    const rim = new THREE.DirectionalLight(0x9fb8ff, 1.1);
+    rim.position.set(-8, 9, -12); sc.add(rim);
+    const fill = new THREE.DirectionalLight(0xffd2a0, 0.35);
+    fill.position.set(10, 5, 9); sc.add(fill);
     this.keyLight = key;
     // ring spots from the truss
     const spotCol = [0xffffff, 0xfff0dd, 0xffffff, 0xfff0dd];

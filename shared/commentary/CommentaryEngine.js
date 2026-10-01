@@ -165,7 +165,7 @@ export function buildPrompt(moment) {
   const facts = Object.entries(ctx).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join('; ');
   const who = moment.speaker?.role === 'colour' ? 'colour commentator (opinionated, witty)' : 'play-by-play commentator (energetic, vivid)';
   const charInfo = [ctx.aChar, ctx.bChar].filter(Boolean).map((c) => `${CHARACTERS[c]?.name}: ${CHARACTERS[c]?.tagline}`).join(' | ');
-  return `You are the ${who} for a fictional pro-wrestling broadcast called RING KINGS.
+  return `You are the ${who} for a fictional pro-wrestling broadcast called ALFREDO APPLERUN 2: WRESTLING.
 Write ONE short spoken line (max 18 words) reacting live to this moment. No hashtags, no emojis, no quotes, no stage directions.
 GAME EVENT: ${moment.key}
 DETAILS: ${facts}

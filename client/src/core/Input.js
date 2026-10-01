@@ -48,6 +48,7 @@ export class Input {
     if (down && e.code === 'Escape') this.emit('pause');
     if (down && e.code === 'KeyV') this.emit('camera');
     if (down && e.code === 'KeyH') this.emit('help');
+    if (down && (e.code === 'Enter' || e.code === 'NumpadEnter')) this.emit('confirm');
     if (!this.enabled) return;
     if (['Space', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
     if (down) { if (!this.keys.has(e.code)) { const b = KEYMAP[e.code]; if (b) this.pressed |= b; } this.keys.add(e.code); }

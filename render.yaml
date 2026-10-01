@@ -17,9 +17,7 @@ services:
         value: production
       - key: GEMINI_API_KEY      # optional – AI commentary (set in the dashboard, never commit it)
         sync: false
-      - key: GEMINI_TTS          # optional – "1" enables AI voice commentary (extra API cost)
-        value: "0"
-      - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+      - key: GEMINI_TTS          # AI voice commentary is ON when a key is set; "0" turns it off
+        value: "1"
       - key: ALLOWED_ORIGINS     # "*" or a comma list, e.g. https://ring-kings-client.onrender.com
         value: "*"

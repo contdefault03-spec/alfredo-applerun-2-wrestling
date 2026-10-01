@@ -174,6 +174,9 @@ export class AudioSystem {
       case 'ring_bell':
         [0, 0.28, 0.56].slice(0, opts.times || 1).forEach((t) => this.partials(o, [1046, 2093, 3140, 4186], { dur: 1.8, gain: 0.45, t }));
         break;
+      case 'munch':
+        for (let i = 0; i < 3; i++) { this.burst(o, { dur: 0.06, gain: 0.7, type: 'bandpass', freq: 1400 + Math.random() * 900, q: 1.5, t: i * 0.11 }); this.tone(o, { f0: 140, f1: 90, dur: 0.07, gain: 0.4, t: i * 0.11 }); }
+        break;
       case 'jump': this.burst(o, { dur: 0.08, gain: 0.25, type: 'lowpass', freq: 800 }); break;
       case 'land': this.tone(o, { f0: 90, f1: 40, dur: 0.12, gain: opts.heavy ? 1.2 : 0.5 }); break;
       case 'impact':

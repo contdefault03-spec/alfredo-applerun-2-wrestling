@@ -29,6 +29,7 @@ export const BASE_STATS = {
   dodgeDuration: 0.34,
   dodgeCooldown: 0.55,
   recoverySpeed: 1.0,      // >1 = gets up / recovers from stun faster
+  downTimeMul: 1.0,        // how long opponents stay down after this wrestler's knockdowns
   maxStamina: 100,
   staminaRegen: 18,        // per second
   special: null,           // ability id from shared/config/abilities.js
@@ -76,14 +77,15 @@ export const CHARACTERS = {
     tagline: 'The Silverback',
     description: 'A colossal gorilla who fights with the food in his left hand. Slow, massive and nearly impossible to knock down.',
     height: 2.2, radius: 0.62, weight: 260,
-    maxHealth: 1700,
+    maxHealth: 1350,
     walkSpeed: 1.9, runSpeed: 4.1, acceleration: 12, turnSpeed: 7,
     jumpStrength: 5.6,
-    attackPower: 1.55, attackSpeed: 0.8, defense: 0.2,
-    grabStrength: 2.0, knockbackResistance: 0.65,
+    attackPower: 1.2, attackSpeed: 0.8, defense: 0.12,
+    grabStrength: 1.8, knockbackResistance: 0.5,
+    downTimeMul: 0.6,      // opponents he knocks down get back up faster
     dodgeSpeed: 5.5, dodgeCooldown: 1.1, recoverySpeed: 0.85,
     maxStamina: 130, staminaRegen: 16,
-    special: 'ajan_crush', specialCooldown: 16, specialCost: 45,
+    special: 'ajan_crush', specialCooldown: 22, specialCost: 60,
     hands: { left: 'food', foodStrikes: true, sound: 'food' },
     moveset: { punch: 'ajan_food_slap', punch2: 'ajan_backhand', punch3: 'ajan_food_smash', kick: 'ajan_stomp_kick', heavy: 'ajan_double_axe', running: 'ajan_charge' },
     voicePitch: 0.5, color: '#9a6a3a',
@@ -95,6 +97,7 @@ export const CHARACTERS = {
       right: { shoulder: [-0.17, 0.605, 0.02], elbow: [-0.31, 0.555, 0.03], wrist: [-0.42, 0.54, 0.03], handTip: [-0.495, 0.53, 0.04] },
       neck: 0.62, headTop: 0.762, hip: [0.09, 0.28], knee: [0.125, 0.14], ankle: [0.135, 0.05], pelvis: 0.30,
       handRadius: 2.2, // food bowl is big – let the hand bone own more of it
+      prop: { side: 'L', center: [0.385, 0.575], radius: 0.11 }, // the food bowl – eaten in his victory celebration
     },
   },
 

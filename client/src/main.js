@@ -6,7 +6,7 @@ const ui = document.getElementById('ui');
 
 function fatal(msg) {
   ui.innerHTML = `<div class="screen" style="align-items:center;justify-content:center;flex-direction:column;background:#05060a">
-    <div class="logo" style="font-size:80px">RING KINGS</div><div style="max-width:560px;text-align:center;margin-top:20px">${msg}</div></div>`;
+    <div class="logo" style="font-size:64px">ALFREDO APPLERUN 2: WRESTLING</div><div style="max-width:560px;text-align:center;margin-top:20px">${msg}</div></div>`;
 }
 
 const gl = canvas.getContext('webgl2');

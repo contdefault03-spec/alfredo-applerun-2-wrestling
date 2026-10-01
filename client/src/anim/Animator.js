@@ -46,6 +46,7 @@ export class Animator {
     const t = this.tgt;
     const st = v.state;
     const omega = this.build(t, v, dt);
+    this.secondary(t, v, dt);
     // critically-damped spring toward the target pose (substepped for stability)
     const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
     const h = dt / steps, k = omega * omega, c = 2 * omega;
@@ -65,6 +66,38 @@ export class Animator {
     this.cur[P.spaceL] = t[P.spaceL]; this.cur[P.spaceR] = t[P.spaceR];
     this.lastState = st;
     return this.cur;
+  }
+
+  /** Look at the opponent and lean into acceleration – makes everyone feel alive. */
+  secondary(t, v, dt) {
+    const st = v.state;
+    if (st === S.IDLE || st === S.MOVE || st === S.BLOCK || st === S.HOLD || st === S.TAUNT || st === S.HITSTUN) {
+      let yaw = 0, pitch = 0;
+      if (v.lookAt) {
+        const dx = v.lookAt.x - v.x, dz = v.lookAt.z - v.z;
+        let a = Math.atan2(dx, dz) - v.yaw; while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI;
+        yaw = Math.max(-1.1, Math.min(1.1, a));
+        const dy = (v.lookAt.y ?? v.y) - v.y, d = Math.hypot(dx, dz) || 1;
+        pitch = Math.max(-0.4, Math.min(0.4, -dy / d * 0.6));
+      }
+      this.look = this.look || { y: 0, p: 0 };
+      this.look.y += (yaw - this.look.y) * Math.min(1, dt * 6); this.look.p += (pitch - this.look.p) * Math.min(1, dt * 6);
+      add(t, 'neck', [this.look.p * 0.4, this.look.y * 0.45, 0]); add(t, 'head', [this.look.p * 0.6, this.look.y * 0.4, 0]);
+      add(t, 'chest', [0, this.look.y * 0.15, 0]);
+    }
+    // lean into acceleration (spine pitch/roll), stronger for light/fast wrestlers
+    const vx = v.vx || 0, vz = v.vz || 0;
+    const ax = (vx - (this.pvx ?? vx)) / Math.max(dt, 1e-3), az = (vz - (this.pvz ?? vz)) / Math.max(dt, 1e-3);
+    this.pvx = vx; this.pvz = vz;
+    if (st === S.IDLE || st === S.MOVE) {
+      const cy = Math.cos(v.yaw), sy = Math.sin(v.yaw);
+      const af = ax * sy + az * cy, al = ax * cy - az * sy;
+      this.lean = this.lean || { f: 0, l: 0 };
+      this.lean.f += (Math.max(-1, Math.min(1, af / 25)) - this.lean.f) * Math.min(1, dt * 5);
+      this.lean.l += (Math.max(-1, Math.min(1, al / 25)) - this.lean.l) * Math.min(1, dt * 5);
+      add(t, 'spine', [this.lean.f * 0.18, 0, -this.lean.l * 0.12]);
+      add(t, 'hipsRot', [0, 0, this.lean.l * 0.06]);
+    }
   }
 
   locomotion(t, v, dt, base) {
@@ -346,6 +379,7 @@ export class Animator {
         return 14;
       }
       case S.CELEBRATE: {
+        if (v.sub === 1) return this.signature(t, v, time);
         applyOverrides(t, RELAXED);
         const pump = Math.sin(time * 6);
         set(t, 'handL', [0.35, 1.05 + pump * 0.05, 0.1]); set(t, 'handR', [0.35, 0.8 - pump * 0.2, 0.2]);
@@ -356,6 +390,52 @@ export class Animator {
       default:
         applyOverrides(t, this.G);
         return 25;
+    }
+  }
+
+  /** Per-character victory celebration (press E after winning). */
+  signature(t, v, time) {
+    applyOverrides(t, RELAXED);
+    const id = this.c.id, w = Math.sin(time * 6), s = Math.sin(time * 9);
+    switch (id) {
+      case 'ajan': {
+        if (v.ateFood) { // already ate: chest beat
+          set(t, 'handL', [-0.1, 0.05, 0.35 + 0.1 * Math.max(0, s)]); set(t, 'handR', [-0.1, 0.05, 0.35 + 0.1 * Math.max(0, -s)]);
+          set(t, 'chest', [-0.15, 0, 0]); set(t, 'head', [-0.35, 0, 0]);
+          return 30;
+        }
+        // bring the food to the mouth, take bites, chew
+        const bite = Math.max(0, Math.sin(time * 4.2));
+        set(t, 'handL', [-0.35, 0.62 + 0.08 * bite, 0.42 - 0.1 * bite]); set(t, 'elbowL', [0.8, -0.6, 0]);
+        set(t, 'handR', [0.1, -0.2, 0.35]);
+        set(t, 'head', [0.2 + 0.15 * bite, 0.15, 0]); set(t, 'neck', [0.1 * bite, 0, 0]);
+        set(t, 'chest', [0.05, 0.15, 0]); set(t, 'hipsOff', [0, -0.03 * bite, 0]);
+        return 22;
+      }
+      case 'max': // alternating weight curls
+        set(t, 'handL', [0.15, -0.1 + 0.55 * Math.max(0, w), 0.25]); set(t, 'handR', [0.15, -0.1 + 0.55 * Math.max(0, -w), 0.25]);
+        set(t, 'elbowL', [0.2, -1, 0]); set(t, 'elbowR', [0.2, -1, 0]); set(t, 'chest', [-0.15, 0, 0]); set(t, 'head', [-0.25, 0, 0]);
+        return 24;
+      case 'rise': // double-biceps flex
+        set(t, 'handL', [0.55, 0.6, 0.0]); set(t, 'handR', [0.55, 0.6, 0.0]); set(t, 'elbowL', [0.2, -1, 0.2]); set(t, 'elbowR', [0.2, -1, 0.2]);
+        set(t, 'chest', [-0.25 + 0.05 * w, 0, 0]); set(t, 'hipsOff', [0, -0.08, 0]); set(t, 'head', [-0.3, 0, 0]);
+        return 20;
+      case 'lucky': // star jumps
+        set(t, 'lift', Math.max(0, Math.sin(time * 7)) * 0.12);
+        set(t, 'handL', [0.6, 0.85 * Math.max(0, Math.sin(time * 7)), 0.05]); set(t, 'handR', [0.6, 0.85 * Math.max(0, Math.sin(time * 7)), 0.05]);
+        set(t, 'footL', [0.18 * Math.max(0, Math.sin(time * 7)), 0, 0]); set(t, 'footR', [0.18 * Math.max(0, Math.sin(time * 7)), 0, 0]);
+        return 35;
+      case 'rot': // pirouette
+        set(t, 'bodyYaw', time * 7); set(t, 'handL', [0.85, 0.35, 0]); set(t, 'handR', [0.85, 0.35, 0]); set(t, 'footR', [0.1, 0.3, 0]);
+        return 40;
+      case 'cave': // theatrical bow
+        set(t, 'spine', [0.75 * Math.min(1, time * 1.5), 0, 0]); set(t, 'handR', [-0.35, -0.2, 0.25]); set(t, 'handL', [0.75, 0.2, -0.4]);
+        set(t, 'footR', [0.1, 0, -0.2]);
+        return 18;
+      default: // masked: salute, then point to the sky
+        if (time < 1.2) { set(t, 'handR', [-0.15, 0.62, 0.25]); set(t, 'elbowR', [1, 0, 0]); }
+        else { set(t, 'handR', [0.15, 1.1, 0.2]); set(t, 'head', [-0.4, 0, 0]); }
+        return 20;
     }
   }
 

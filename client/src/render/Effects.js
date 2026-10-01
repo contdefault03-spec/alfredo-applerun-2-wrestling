@@ -121,3 +121,57 @@ export class Effects {
     if (this.flashT > 0) { this.flashT -= dt; if (this.flashT <= 0) this.flash.intensity = 0; else this.flash.intensity *= 0.8; }
   }
 }
+
+// ── Confetti: thousands of fluttering paper bits raining over the ring ──
+export class Confetti {
+  constructor(scene, n = 2200) {
+    this.n = n;
+    this.pos = new Float32Array(n * 3); this.vel = new Float32Array(n * 3); this.ph = new Float32Array(n); this.life = new Float32Array(n);
+    const col = new Float32Array(n * 3);
+    const pal = [[1, 0.84, 0.25], [0.95, 0.15, 0.25], [0.2, 0.5, 1], [1, 1, 1], [0.3, 0.9, 0.45], [1, 0.45, 0.85]];
+    for (let i = 0; i < n; i++) { const c = pal[i % pal.length]; col.set(c, i * 3); this.ph[i] = Math.random() * 100; }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aPh', new THREE.BufferAttribute(this.ph, 1));
+    g.setAttribute('aLife', new THREE.BufferAttribute(this.life, 1).setUsage(THREE.DynamicDrawUsage));
+    this.geo = g;
+    this.u = { uTime: { value: 0 } };
+    const m = new THREE.ShaderMaterial({
+      uniforms: this.u, transparent: true, depthWrite: false, vertexColors: true,
+      vertexShader: `attribute float aPh; attribute float aLife; uniform float uTime; varying vec3 vC; varying float vA; varying float vFlip;
+        void main(){ vC = color; vA = clamp(aLife, 0.0, 1.0); vFlip = abs(sin(uTime * 7.0 + aPh));
+          vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = (aLife > 0.0 ? 52.0 : 0.0) / -mv.z; gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: `varying vec3 vC; varying float vA; varying float vFlip;
+        void main(){ vec2 p = gl_PointCoord - 0.5; if (abs(p.x) > 0.5 * max(vFlip, 0.15) || abs(p.y) > 0.32) discard;
+          gl_FragColor = vec4(vC * (0.6 + 0.4 * vFlip), vA); }`,
+    });
+    this.points = new THREE.Points(g, m); this.points.frustumCulled = false; this.points.renderOrder = 7;
+    scene.add(this.points);
+    this.emitT = 0; this.next = 0;
+  }
+  start(seconds = 9) { this.emitT = seconds; }
+  update(dt, time) {
+    this.u.uTime.value = time;
+    if (this.emitT > 0) {
+      this.emitT -= dt;
+      const k = Math.floor(dt * 260);
+      for (let j = 0; j < k; j++) {
+        const i = this.next; this.next = (this.next + 1) % this.n;
+        this.pos.set([(Math.random() - 0.5) * 10, 10 + Math.random() * 2, (Math.random() - 0.5) * 10], i * 3);
+        this.vel.set([(Math.random() - 0.5) * 0.6, -0.8 - Math.random() * 0.6, (Math.random() - 0.5) * 0.6], i * 3);
+        this.life[i] = 8;
+      }
+    }
+    for (let i = 0; i < this.n; i++) {
+      if (this.life[i] <= 0) continue;
+      const k = i * 3, ph = this.ph[i];
+      this.pos[k] += (this.vel[k] + Math.sin(time * 2.1 + ph) * 0.5) * dt;
+      this.pos[k + 1] += this.vel[k + 1] * dt;
+      this.pos[k + 2] += (this.vel[k + 2] + Math.cos(time * 1.7 + ph) * 0.5) * dt;
+      if (this.pos[k + 1] < 0.02 + (Math.abs(this.pos[k]) < 3.7 && Math.abs(this.pos[k + 2]) < 3.7 ? 1.2 : 0)) { this.vel[k + 1] = 0; this.vel[k] = this.vel[k + 2] = 0; this.life[i] -= dt * 0.3; }
+      else this.life[i] -= dt * 0.05;
+    }
+    this.geo.attributes.position.needsUpdate = true; this.geo.attributes.aLife.needsUpdate = true;
+  }
+}

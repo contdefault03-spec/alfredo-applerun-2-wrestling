@@ -1,4 +1,4 @@
-// RING KINGS game server
+// ALFREDO APPLERUN 2: WRESTLING – game server
 //  • serves the built client (dist/) – one Render Web Service can host everything
 //  • WebSocket endpoint /ws for lobbies + authoritative matches
 //  • /api/config, /api/commentary, /api/tts (optional Gemini), /healthz
@@ -180,6 +180,6 @@ setInterval(() => {
   }
 }, 25000).unref?.();
 
-server.listen(PORT, () => log.info(`RING KINGS server on :${PORT}  (static: ${fs.existsSync(DIST) ? DIST : 'not built'})`));
+server.listen(PORT, () => log.info(`ALFREDO APPLERUN 2 server on :${PORT}  (static: ${fs.existsSync(DIST) ? DIST : 'not built'})`));
 
 export { server, lobby };

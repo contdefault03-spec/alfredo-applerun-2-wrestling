@@ -56,9 +56,9 @@ export class ScreenDirector {
       x.font = 'bold 90px Impact, Arial Black, sans-serif'; x.fillStyle = '#fff';
       x.fillText(`${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`, W / 2, 560);
     } else {
-      x.font = 'bold 190px Impact, Arial Black, sans-serif'; x.fillStyle = '#d4af37'; x.shadowColor = '#ff9d00'; x.shadowBlur = 30;
-      x.fillText('RING KINGS', W / 2, H / 2 - 30); x.shadowBlur = 0;
-      x.font = 'bold 60px Impact, Arial Black, sans-serif'; x.fillStyle = '#fff'; x.fillText('LIVE WRESTLING', W / 2, H / 2 + 110);
+      x.font = 'bold 150px Impact, Arial Black, sans-serif'; x.fillStyle = '#d4af37'; x.shadowColor = '#ff9d00'; x.shadowBlur = 30;
+      x.fillText('ALFREDO', W / 2, H / 2 - 130); x.fillText('APPLERUN 2', W / 2, H / 2 + 20); x.shadowBlur = 0;
+      x.font = 'bold 70px Impact, Arial Black, sans-serif'; x.fillStyle = '#fff'; x.fillText('WRESTLING', W / 2, H / 2 + 150);
     }
     tron.texture.needsUpdate = true;
     // pillars
@@ -71,8 +71,8 @@ export class ScreenDirector {
         y.fillRect(0, (yy + h + 80) % (h + 80) - 40, w, 16);
       }
       y.save(); y.translate(w / 2, h / 2); y.rotate(-Math.PI / 2);
-      y.font = 'bold 150px Impact, Arial Black, sans-serif'; y.fillStyle = '#fff'; y.textAlign = 'center'; y.textBaseline = 'middle';
-      y.fillText(k ? 'KINGS' : 'RING', 0, 0); y.restore();
+      y.font = 'bold 130px Impact, Arial Black, sans-serif'; y.fillStyle = '#fff'; y.textAlign = 'center'; y.textBaseline = 'middle';
+      y.fillText(k ? 'APPLERUN 2' : 'ALFREDO', 0, 0); y.restore();
       pc.texture.needsUpdate = true;
     }
     // ribbons scroll

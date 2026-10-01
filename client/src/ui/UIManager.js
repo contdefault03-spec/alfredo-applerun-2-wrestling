@@ -45,7 +45,7 @@ export class UIManager {
 
   // ── loading ──
   showLoading() {
-    this.mount('loading', `<div id="loading" class="screen"><div class="logo">RING KINGS<small>WRESTLING</small></div>
+    this.mount('loading', `<div id="loading" class="screen"><div class="logo">ALFREDO APPLERUN 2<small>WRESTLING</small></div>
       <div class="bar"><div></div></div><div class="dim" style="margin-top:12px" id="ltxt">Loading the arena…</div></div>`);
   }
   loading(p, text) {
@@ -60,7 +60,7 @@ export class UIManager {
     const s = this.settings.get();
     const c = CHARACTERS[s.lastChar] || CHARACTERS.masked;
     const e = this.mount('menu', `<div id="menu" class="screen"><div class="left">
-      <div class="logo">RING KINGS<small>WRESTLING</small></div>
+      <div class="logo">ALFREDO<br>APPLERUN 2<small>WRESTLING</small></div>
       <div class="row name-row"><span class="dim">WRESTLER NAME</span><input class="field" id="pname" maxlength="16" placeholder="Guest" value="${esc(s.name)}" /></div>
       <button class="btn primary" data-a="play">PLAY</button>
       <button class="btn" data-a="multiplayer">MULTIPLAYER</button>
@@ -250,7 +250,7 @@ export class UIManager {
       <h2>SETTINGS</h2><div class="settings-grid">
       <span>Graphics quality</span><select class="field" data-k="quality">${['auto', 'low', 'medium', 'high', 'ultra'].map((q) => `<option ${q === s.quality ? 'selected' : ''}>${q}</option>`).join('')}</select>
       ${range('masterVolume', 'Master volume')}${range('sfxVolume', 'Effects volume')}${range('crowdVolume', 'Crowd volume')}${range('voiceVolume', 'Commentary volume')}${range('musicVolume', 'Music volume')}
-      <span>Voice commentary</span><select class="field" data-k="voice"><option value="off">Off (subtitles only)</option><option value="browser">Browser voice</option><option value="ai">AI voice (server Gemini TTS)</option></select>
+      <span>Voice commentary</span><select class="field" data-k="voice"><option value="auto">Auto (AI voice when available)</option><option value="ai">AI voice (Gemini)</option><option value="browser">Browser voice</option><option value="off">Off (subtitles only)</option></select>
       <span>AI commentary text</span><select class="field" data-k="aiCommentary"><option value="true">On (when server has a Gemini key)</option><option value="false">Off</option></select>
       <span>Camera</span><select class="field" data-k="cameraMode"><option value="auto">Broadcast (auto)</option><option value="free">Free orbit</option></select>
       <span>Camera shake</span><input type="range" min="0" max="1.5" step="0.1" data-k="cameraShake" value="${s.cameraShake}" />

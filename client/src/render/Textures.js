@@ -1,7 +1,8 @@
 // Procedural canvas textures for the arena (no external image assets needed).
 import * as THREE from 'three';
 
-export const BRAND = 'RING KINGS';
+export const BRAND = 'ALFREDO APPLERUN 2';
+export const GAME_TITLE = 'ALFREDO APPLERUN 2: WRESTLING';
 
 function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 function tex(c, { repeat = null, srgb = true, aniso = 8 } = {}) {
@@ -33,8 +34,10 @@ export function ringCanvasTexture() {
   x.fillStyle = 'rgba(20,32,70,0.9)';
   x.beginPath(); x.arc(0, 0, 360, 0, Math.PI * 2); x.fill();
   x.strokeStyle = '#d4af37'; x.lineWidth = 18; x.beginPath(); x.arc(0, 0, 340, 0, Math.PI * 2); x.stroke();
-  x.fillStyle = '#d4af37'; x.font = 'bold 150px Impact, Arial Black, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.fillText('RING', 0, -70); x.fillText('KINGS', 0, 90);
+  x.fillStyle = '#d4af37'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = 'bold 130px Impact, Arial Black, sans-serif'; x.fillText('ALFREDO', 0, -80);
+  x.font = 'bold 108px Impact, Arial Black, sans-serif'; x.fillText('APPLERUN 2', 0, 40);
+  x.font = 'bold 54px Impact, Arial Black, sans-serif'; x.fillStyle = '#e8e8f0'; x.fillText('WRESTLING', 0, 140); x.fillStyle = '#d4af37';
   // crown
   x.beginPath(); x.moveTo(-120, -230); x.lineTo(-80, -170); x.lineTo(-40, -250); x.lineTo(0, -170); x.lineTo(40, -250); x.lineTo(80, -170); x.lineTo(120, -230); x.lineTo(110, -150); x.lineTo(-110, -150); x.closePath(); x.fill();
   x.restore();
@@ -53,10 +56,10 @@ export function apronTexture() {
   const g = x.createLinearGradient(0, 0, 0, 256); g.addColorStop(0, '#0d1224'); g.addColorStop(1, '#05070d');
   x.fillStyle = g; x.fillRect(0, 0, 2048, 256);
   x.fillStyle = '#c8102e'; x.fillRect(0, 0, 2048, 14);
-  x.font = 'bold 110px Impact, Arial Black, sans-serif'; x.textBaseline = 'middle';
+  x.font = 'bold 84px Impact, Arial Black, sans-serif'; x.textBaseline = 'middle';
   for (let i = 0; i < 2; i++) {
-    x.fillStyle = '#e8e8f0'; x.fillText(BRAND, 90 + i * 1024, 128);
-    x.fillStyle = '#d4af37'; x.fillText('★', 820 + i * 1024, 128);
+    x.fillStyle = '#e8e8f0'; x.fillText(BRAND, 50 + i * 1024, 128);
+    x.fillStyle = '#d4af37'; x.fillText('★', 900 + i * 1024, 128);
   }
   noise(x, 2048, 256, 8);
   return tex(c, { repeat: [1, 1] });
@@ -67,7 +70,7 @@ export function barricadeTexture() {
   const c = canvas(1024, 128); const x = c.getContext('2d');
   x.fillStyle = '#111318'; x.fillRect(0, 0, 1024, 128);
   x.font = 'bold 62px Impact, Arial Black, sans-serif'; x.fillStyle = '#6f7a99'; x.textBaseline = 'middle';
-  x.fillText(BRAND, 30, 66); x.fillStyle = '#c8102e'; x.fillText('LIVE', 420, 66); x.fillStyle = '#6f7a99'; x.fillText(BRAND, 600, 66);
+  x.font = 'bold 52px Impact, Arial Black, sans-serif'; x.fillText(BRAND, 30, 66); x.fillStyle = '#c8102e'; x.fillText('WRESTLING', 560, 66); x.fillStyle = '#6f7a99'; x.fillText('LIVE', 860, 66);
   noise(x, 1024, 128, 12);
   return tex(c, { repeat: [4, 1] });
 }
@@ -164,7 +167,7 @@ export function coneTexture() {
 export function deskTexture() {
   const c = canvas(1024, 256); const x = c.getContext('2d');
   x.fillStyle = '#0b0e18'; x.fillRect(0, 0, 1024, 256);
-  x.fillStyle = '#d4af37'; x.font = 'bold 96px Impact, Arial Black, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = '#d4af37'; x.font = 'bold 66px Impact, Arial Black, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
   x.fillText(BRAND, 512, 110);
   x.fillStyle = '#8a93b2'; x.font = 'bold 36px Arial, sans-serif'; x.fillText('COMMENTARY', 512, 190);
   return tex(c);

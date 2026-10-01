@@ -68,7 +68,7 @@ test('friend rooms: create → code → join → start → authoritative sync �
   const sa = await A.wait((m) => m.t === 'start'), sb = await B.wait((m) => m.t === 'start');
   assert.equal(sa.roster.length, 2);
   assert.notEqual(sa.you, sb.you);
-  await sleep(3500); // intro
+  await sleep(5000); // intro (4.5 s)
   const before = A.snaps.at(-1).f.find((f) => f[0] === sb.you);
   let seq = 0;
   for (let i = 0; i < 40; i++) { B.send({ t: 'input', seq: ++seq, mx: 0, mz: -1, held: 0, pressed: 0 }); await sleep(16); }

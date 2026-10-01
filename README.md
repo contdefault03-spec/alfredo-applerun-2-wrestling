@@ -1,4 +1,4 @@
-# RING KINGS — 3D Multiplayer Wrestling (browser)
+# ALFREDO APPLERUN 2: WRESTLING — 3D Multiplayer Wrestling (browser)
 
 A small-scale but fully playable modern 3D wrestling game that runs in the browser.
 Your seven GLB characters — **Max, Masked, Ajan, Rise, Cave, Rot and Lucky** — are the
@@ -56,6 +56,7 @@ Play with a friend locally: run `npm run build && npm start`, open `http://local
 | G | D-pad down | throw the held item |
 | X | LT | **special ability** |
 | T | Back | taunt (builds special meter, crowd pops) |
+| E (after winning) | | signature victory celebration (Ajan eats his food, Max curls his weights, Lucky star-jumps…) · Enter = results |
 | mouse (click to lock) / ← → | right stick | rotate camera · **V** toggles broadcast/free camera |
 | mash buttons | mash | escape holds, get up faster, **kick out of pins** |
 | Esc | Start | pause · **H** shows/hides the controls card |
@@ -68,7 +69,7 @@ Play with a friend locally: run `npm run build && npm start`, open `http://local
 |---|---|---|
 | **Max** | His hand-held iron weights are weapons: armed jabs/hooks, double smash, iron hammer (metal impacts, weapon damage) | Iron Barrage – dash + 5 weight strikes + double smash |
 | **Masked** | Balanced default wrestler | Masked Driver – grab + sit-out powerbomb |
-| **Ajan** | Gorilla: 2.2 m, 260 kg, 1700 HP, slow, super-armour vs light hits, attacks with the food in his left hand | **Silverback Crush** – locks on, leaps ~4 m, crashes onto the target (290 base damage ×1.55 power, shockwave, knock-back), cinematic camera, plays **`Ajan.mp3`** only when it lands. Meter + 16 s cooldown, range 1.2–9.5 m |
+| **Ajan** | Gorilla: 2.2 m, 260 kg, 1350 HP, slow, armour vs light hits, attacks with the food in his left hand; opponents he drops get up faster | **Silverback Crush** – locks on, leaps ~4 m, crashes onto the target (200 base damage ×1.2 power, shockwave, knock-back), cinematic camera, plays **`Ajan.mp3`** only when it lands. 60 meter + 22 s cooldown, range 1.2–9.5 m. Victory celebration: **eats his food** |
 | **Rise** | Balanced athlete | Rising Uppercut – launcher |
 | **Cave** | Standard brawler | Cave-In spear tackle |
 | **Rot** | Standard, quick feet | Rot Spin – 360° heel kick |
@@ -89,6 +90,8 @@ bell, traffic cones — pick up, swing, overhead smash, throw, drop. Items Match
 **Modes:** Normal (1v1 or teams: player+player vs AI etc.), Free-For-All (3–6), Tag Team (2v2, legal
 man + tags), Items Match, **Hell in a Cell** (steel cell with collision, climbable walls, dive off,
 falls count anywhere). All modes work in single-player and online.
+
+**Post-match:** the winner keeps control after the bell — walk around, climb the turnbuckles, taunt and do a signature celebration while confetti and pyro go off and the ring announcer (AI voice when available) declares the winner.
 
 **Presentation:** PBR + ACES tone mapping, shadows, bloom, MSAA, vignette/impact FX, volumetric
 light cones, LED ribbon boards, reacting crowd (stand/cheer/arms/camera flashes), referee and two
@@ -143,8 +146,9 @@ To let **Gemini** write the lines, set on the **server** (Render dashboard or `.
 
 ```
 GEMINI_API_KEY=your-key          # never put this in client code – the browser never sees it
-GEMINI_MODEL=gemini-2.5-flash    # any generateContent text model
-GEMINI_TTS=1                     # optional: AI voice via Gemini TTS (extra cost), then pick "AI voice" in Settings
+GEMINI_TTS=1                     # AI voice (default on when a key is set; 0 = off)
+# GEMINI_MODEL / GEMINI_TTS_MODEL optional – defaults are gemini-flash-lite-latest and gemini-3.8-flash-lite-tts;
+# if a model is retired (404) the server automatically falls back to the next one
 GEMINI_RPM=40                    # optional: global requests/minute budget
 ```
 

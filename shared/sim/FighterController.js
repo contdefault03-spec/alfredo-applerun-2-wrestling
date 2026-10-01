@@ -4,6 +4,7 @@ import { ATTACKS, DEFAULT_MOVESET } from '../config/attacks.js';
 import { ARENA } from '../config/arena.js';
 import { BTN, S, ZONE, FREE_STATES, DOWN_STATES } from './constants.js';
 import { setState, forwardOf, turnToward, angleTo, dist2D, isAlive, wrapAngle, hpFrac } from './Fighter.js';
+import { CELEBRATION_TIME } from './MatchSystem.js';
 
 const R = ARENA.ring;
 const GRAV = ARENA.gravity;
@@ -196,17 +197,34 @@ export class FighterController {
         break;
       case S.APRON: f.vx = f.vz = 0; break;
       case S.KO: f.vx *= 0.9; f.vz *= 0.9; break;
-      case S.CELEBRATE: f.vx = f.vz = 0; break;
+      case S.CELEBRATE:
+        f.vx = f.vz = 0;
+        if (f.stateDur > 0 && f.stateTime >= f.stateDur) { if (f.sub === 1 && f.charId === 'ajan') f.ateFood = true; setState(f, S.IDLE); }
+        break;
     }
     f.input.pressed = 0;
     this.physics(f, dt);
   }
 
+  /** Signature victory celebration (E after winning). Ajan eats the food in his hand. */
+  startCelebrate(f) {
+    const t = CELEBRATION_TIME[f.charId] ?? CELEBRATION_TIME.default;
+    setState(f, S.CELEBRATE, f.charId === 'ajan' && f.ateFood ? CELEBRATION_TIME.default : t);
+    f.sub = 1;
+    this.world.emit('celebrate', { fighter: f.id, eat: f.charId === 'ajan' && !f.ateFood });
+  }
+
   // ── free (actionable) state ──
   free(f, dt, tgt) {
     const w = this.world, inp = f.input, h = inp.held;
-    const p = inp.pressed | (f.bufT > 0 ? f.buf : 0);
+    let p = inp.pressed | (f.bufT > 0 ? f.buf : 0);
     f.buf = 0; f.bufT = 0;
+    if (w.match.phase === 'finished' || w.match.phase === 'over') {
+      // victory lap: no more fighting – E celebrates, T taunts, F still climbs turnbuckles
+      if (p & BTN.GRAB) { this.startCelebrate(f); return; }
+      p &= BTN.JUMP | BTN.TAUNT | BTN.INTERACT;
+      inp.pressed = p;
+    }
     // block
     if (h & BTN.BLOCK) { if (f.state !== S.BLOCK) setState(f, S.BLOCK); }
     else if (f.state === S.BLOCK) setState(f, S.IDLE);

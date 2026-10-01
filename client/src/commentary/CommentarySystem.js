@@ -15,6 +15,8 @@ export class CommentarySystem {
     this.voiceQueue = [];
     this.inflight = 0;
     this.fetchCaps();
+    // browsers load voices asynchronously
+    if (window.speechSynthesis) { speechSynthesis.getVoices(); speechSynthesis.addEventListener?.('voiceschanged', () => speechSynthesis.getVoices()); }
   }
 
   async fetchCaps() {
@@ -26,6 +28,7 @@ export class CommentarySystem {
 
   /** Local matches run their own engine. Online matches receive lines from the server. */
   startLocal(world) {
+    if (!this.caps.ai) this.fetchCaps();
     this.engine = new CommentaryEngine({
       nameOf: (id) => world.byId(id)?.name ?? 'someone',
       charOf: (id) => world.byId(id)?.charId ?? null,
@@ -64,10 +67,32 @@ export class CommentarySystem {
     const idx = SPEAKERS.indexOf(speaker);
     const npc = this.commentators[idx >= 0 ? idx : 0];
     if (npc) { npc.speak(1.2 + line.text.length / 25); if (line.priority >= 9) this.commentators.forEach((c) => c.hype()); }
-    const mode = this.settings.get().voice;
+    this.queueVoice({ text: line.text, speaker: Math.max(0, idx), priority: line.priority || 1 });
+  }
+
+  /** Ring announcer (speaker 2) – jumps the queue. */
+  announce(text, { who = 'RING ANNOUNCER' } = {}) {
+    this.ui.commentary(who, text, true);
+    if (window.speechSynthesis && this.currentUtterance) speechSynthesis.cancel();
+    this.voiceQueue = [];
+    this.queueVoice({ text, speaker: 2, priority: 10 });
+  }
+
+  voiceMode() {
+    const m = this.settings.get().voice;
+    if (m === 'off') return 'off';
+    if ((m === 'ai' || m === 'auto') && this.caps.tts) return 'ai';
+    return 'browser';
+  }
+
+  queueVoice(item) {
+    const mode = this.voiceMode();
     if (mode === 'off') return;
-    this.voiceQueue.push({ text: line.text, speaker: idx, priority: line.priority || 1 });
-    if (this.voiceQueue.length > 2) this.voiceQueue.sort((a, b) => b.priority - a.priority).length = 2;
+    item.at = performance.now();
+    // start generating AI audio right away so it overlaps with whatever is playing
+    if (mode === 'ai') item.audio = this.fetchAI(item);
+    this.voiceQueue.push(item);
+    if (this.voiceQueue.length > 3) this.voiceQueue.sort((a, b) => b.priority - a.priority).length = 3;
     this.pump();
   }
 
@@ -75,38 +100,46 @@ export class CommentarySystem {
     if (this.speaking || !this.voiceQueue.length) return;
     this.speaking = true;
     const item = this.voiceQueue.shift();
-    const mode = this.settings.get().voice;
     let ok = false;
-    if (mode === 'ai' && this.caps.tts) ok = await this.speakAI(item);
-    if (!ok) await this.speakBrowser(item);
+    if (performance.now() - item.at < 9000) {
+      if (item.audio) { const buf = await item.audio; if (buf) ok = await this.audio.playEncoded(buf, item.speaker === 2 ? 1.2 : 1); }
+      if (!ok) await this.speakBrowser(item);
+    }
     this.speaking = false;
     this.pump();
   }
 
-  async speakAI(item) {
+  async fetchAI(item) {
     try {
       const r = await fetch(apiUrl('/api/tts'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: item.text, speaker: item.speaker }), signal: AbortSignal.timeout(6000),
+        body: JSON.stringify({ text: item.text, speaker: item.speaker }), signal: AbortSignal.timeout(12000),
       });
-      if (!r.ok) return false;
-      const buf = await r.arrayBuffer();
-      return await this.audio.playEncoded(buf, 1);
-    } catch { return false; }
+      if (!r.ok) return null;
+      return await r.arrayBuffer();
+    } catch { return null; }
   }
 
   speakBrowser(item) {
     return new Promise((resolve) => {
-      if (!window.speechSynthesis) return resolve(false);
+      const ss = window.speechSynthesis;
+      if (!ss) return resolve(false);
       const u = new SpeechSynthesisUtterance(item.text);
-      const voices = speechSynthesis.getVoices().filter((v) => v.lang?.startsWith('en'));
-      if (voices.length) u.voice = voices[item.speaker % voices.length];
-      u.rate = 1.12; u.pitch = item.speaker ? 1.05 : 0.9;
-      u.volume = Math.min(1, this.settings.get().voiceVolume * this.settings.get().masterVolume * 1.2);
-      const done = () => resolve(true);
+      const all = ss.getVoices();
+      const voices = all.filter((v) => /^en/i.test(v.lang || ''));
+      const pool = voices.length ? voices : all;
+      if (pool.length) u.voice = pool[(item.speaker * 3) % pool.length];
+      u.lang = u.voice?.lang || 'en-US';
+      if (item.speaker === 2) { u.rate = 0.88; u.pitch = 0.65; } else { u.rate = 1.12; u.pitch = item.speaker ? 1.08 : 0.9; }
+      const s = this.settings.get();
+      u.volume = Math.max(0.2, Math.min(1, s.voiceVolume * s.masterVolume * 1.3));
+      this.currentUtterance = u; // keep a reference – Chrome drops events of GC'd utterances
+      let finished = false;
+      const done = () => { if (finished) return; finished = true; this.currentUtterance = null; resolve(true); };
       u.onend = done; u.onerror = done;
-      setTimeout(done, 7000);
-      speechSynthesis.speak(u);
+      setTimeout(done, 3000 + item.text.length * 90);
+      if (ss.paused) ss.resume();
+      ss.speak(u);
     });
   }
 }

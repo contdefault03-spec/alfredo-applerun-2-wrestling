@@ -6,7 +6,8 @@ import { S, ZONE, DOWN_STATES } from './constants.js';
 import { setState, dist2D, isAlive, hpFrac, angleTo, turnToward } from './Fighter.js';
 
 const R = ARENA.ring;
-const INTRO_TIME = 3.2, FINISH_TIME = 7.5, COUNT_INTERVAL = 0.85;
+const INTRO_TIME = 4.5, FINISH_TIME = 16, COUNT_INTERVAL = 0.85;
+export const CELEBRATION_TIME = { ajan: 3.6, max: 2.6, lucky: 2.2, rot: 1.8, default: 2.4 };
 
 export class MatchSystem {
   constructor(world) {
@@ -52,7 +53,8 @@ export class MatchSystem {
 
   frozen(f) {
     if (this.phase === 'intro') return true;
-    if (this.phase === 'finished' || this.phase === 'over') return f.state !== S.CELEBRATE && f.state !== S.AIRBORNE && f.state !== S.KNOCKDOWN;
+    // after the bell winners stay in control (walk around, taunt, celebrate); everyone else stops
+    if (this.phase === 'finished' || this.phase === 'over') return !this.winners.includes(f.id) && f.state !== S.AIRBORNE && f.state !== S.KNOCKDOWN;
     return false;
   }
 
@@ -70,7 +72,7 @@ export class MatchSystem {
       else this.checkWin();
     } else if (this.phase === 'finished') {
       if (this.phaseTime > 1.2) for (const f of w.fighters) {
-        if (this.winners.includes(f.id) && (f.state === S.IDLE || f.state === S.MOVE)) setState(f, S.CELEBRATE);
+        if (this.winners.includes(f.id) && f.isAI && f.state === S.IDLE && !f.celebrated) { f.celebrated = true; this.world.controller.startCelebrate(f); }
       }
       if (this.phaseTime > FINISH_TIME) { this.phase = 'over'; this.phaseTime = 0; w.emit('match_over', { winnerTeam: this.winnerTeam }); }
     }

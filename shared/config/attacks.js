@@ -82,13 +82,13 @@ export const ATTACKS = {
                        knockback: 4, reaction: 'stagger', stun: 0.5, sound: 'food', next: 'ajan_backhand', lunge: 1.5 }),
   ajan_backhand:   A({ name: 'Silverback Backhand', anim: 'hook_r', damage: 70, startup: 0.22, active: 0.1, recovery: 0.34, reach: 0.6, height: 0.74, hitRadius: 0.45,
                        knockback: 5, reaction: 'stagger', stun: 0.55, sound: 'heavy', next: 'ajan_food_smash' }),
-  ajan_food_smash: A({ name: 'Feast Smash', anim: 'food_smash', damage: 125, startup: 0.36, active: 0.12, recovery: 0.55, reach: 0.65, height: 0.62, hitRadius: 0.55,
+  ajan_food_smash: A({ name: 'Feast Smash', anim: 'food_smash', damage: 100, startup: 0.36, active: 0.12, recovery: 0.55, reach: 0.65, height: 0.62, hitRadius: 0.55,
                        knockback: 7.5, launch: 3, reaction: 'knockdown', sound: 'food', hitstop: 0.14, guardBreak: true, crowd: 0.55 }),
   ajan_stomp_kick: A({ name: 'Gorilla Push Kick', anim: 'kick_front', damage: 75, startup: 0.24, active: 0.1, recovery: 0.4, reach: 0.7, height: 0.35,
                        hitRadius: 0.5, knockback: 7, reaction: 'knockdown', sound: 'heavy', hitstop: 0.1, next: 'roundhouse' }),
-  ajan_double_axe: A({ name: 'Double Axe Handle', anim: 'overhead_smash', damage: 140, startup: 0.5, active: 0.12, recovery: 0.6, reach: 0.6, height: 0.6,
+  ajan_double_axe: A({ name: 'Double Axe Handle', anim: 'overhead_smash', damage: 110, startup: 0.5, active: 0.12, recovery: 0.6, reach: 0.6, height: 0.6,
                        hitRadius: 0.6, knockback: 8, launch: 2, reaction: 'knockdown', sound: 'heavy', guardBreak: true, hitstop: 0.16, crowd: 0.6, armor: true }),
-  ajan_charge:     A({ name: 'Silverback Charge', anim: 'charge', type: 'running', damage: 130, startup: 0.1, active: 0.3, recovery: 0.55, reach: 0.4, height: 0.55,
+  ajan_charge:     A({ name: 'Silverback Charge', anim: 'charge', type: 'running', damage: 100, startup: 0.1, active: 0.3, recovery: 0.55, reach: 0.4, height: 0.55,
                        hitRadius: 0.7, knockback: 10, launch: 3, reaction: 'knockdown', sound: 'heavy', lunge: 6.5, armor: true, crowd: 0.6 }),
 
   // ── LUCKY ──

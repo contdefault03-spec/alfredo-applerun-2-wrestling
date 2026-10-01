@@ -37,7 +37,7 @@ export class AssetManager {
         gltf.scene.updateMatrixWorld(true);
         const mat = src.material;
         // Tripo exports look like wet plastic under arena lights – tame the gloss
-        mat.envMapIntensity = 0.55;
+        mat.envMapIntensity = 0.85;
         mat.metalness = Math.min(mat.metalness ?? 0, 0.15);
         mat.onBeforeCompile = (sh) => {
           sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>',

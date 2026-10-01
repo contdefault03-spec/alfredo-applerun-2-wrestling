@@ -16,8 +16,8 @@ import { ArenaView } from '../render/ArenaBuilder.js';
 import { CrowdSystem } from '../render/CrowdSystem.js';
 import { FighterView } from '../render/FighterView.js';
 import { ItemViews } from '../render/ItemViews.js';
-import { Effects } from '../render/Effects.js';
-import { Referee, Commentator } from '../render/NPCs.js';
+import { Effects, Confetti } from '../render/Effects.js';
+import { Referee, Commentator, Announcer } from '../render/NPCs.js';
 import { ScreenDirector } from '../render/ScreenDirector.js';
 import { CameraSystem } from '../camera/CameraSystem.js';
 import { AudioSystem } from '../audio/AudioSystem.js';
@@ -58,6 +58,7 @@ export class Game {
     this.input.on('pause', () => this.togglePause());
     this.input.on('camera', () => { if (this.state === 'match') this.ui.feed('Camera: ' + (this.camera.toggleMode() === 'auto' ? 'Broadcast' : 'Free')); });
     this.input.on('help', () => this.ui.toggleHelp());
+    this.input.on('confirm', () => { if (this.state === 'match' && this.session && ['finished', 'over'].includes(this.session.view().match.phase)) this.showResults(this.endInfo || { winners: this.session.view().match.winners, method: this.session.view().match.method }); });
     this.wireNet();
   }
 
@@ -73,6 +74,8 @@ export class Game {
     this.referee = new Referee(this.scene);
     this.referee.root.position.set(0, ARENA.ring.height, -1.5);
     this.commentators = this.arena.deskSeats.map((s, i) => new Commentator(this.scene, s, i ? '#3a1c24' : '#1c2238'));
+    this.announcer = new Announcer(this.scene);
+    this.confetti = new Confetti(this.scene);
     this.commentary = new CommentarySystem({ ui: this.ui, audio: this.audio, settings: this.settings, commentators: this.commentators });
     this.screens = new ScreenDirector(this.arena);
     this.renderer.renderer.compile(this.scene, this.renderer.camera);
@@ -190,6 +193,14 @@ export class Game {
     this.camera.yaw = Math.atan2(-this.me.x, -this.me.z) + 0.6;
     this.ui.banner(session.rules.name.toUpperCase(), view.fighters.map((f) => getCharacter(f.charId).name).join('  VS  '), 2800);
     this.screens.matchIntro(view);
+    this.endInfo = null;
+    this.announcerLeft = false;
+    // ring announcer introduces the match from the centre of the ring
+    this.announcer.pos.set(0, ARENA.ring.height, 0.2); this.announcer.goTo(0, ARENA.ring.height, 0.2, 0);
+    const names = view.fighters.filter((f) => f.state !== 'apron').map((f) => getCharacter(f.charId).name);
+    const all = view.fighters.map((f) => getCharacter(f.charId).name);
+    const intro = `Ladies and gentlemen! The following ${session.rules.name} is scheduled for one fall! Introducing... ${all.slice(0, -1).join('... ') || all[0]}${all.length > 1 ? '... and... ' + all[all.length - 1] : ''}!`;
+    setTimeout(() => { if (this.state === 'match') { this.commentary.announce(intro); this.announcer.speak(5); } }, 300);
     this.resultsShown = false;
   }
 
@@ -203,6 +214,8 @@ export class Game {
     this.input.enabled = false;
     if (document.pointerLockElement) document.exitPointerLock?.();
     this.camera.cine = null;
+    this.announcer?.goHome(); if (this.announcer) this.announcer.pos.set(this.announcer.home.x, 0, this.announcer.home.z);
+    if (this.confetti) this.confetti.emitT = 0;
   }
 
   togglePause() {
@@ -251,7 +264,7 @@ export class Game {
     });
     n.on('error', (m) => { if (this.state === 'lobby') this.ui.lobbyError(m.message); else if (this.state === 'friend') this.ui.friendError(m.message); else this.ui.toast(m.message); if (this.state === 'connecting') this.friendMenu(); });
     n.on('start', (m) => this.beginMatch(new OnlineSession(n, m)));
-    n.on('end', (m) => { if (this.state === 'match' && this.session?.online) setTimeout(() => this.showResults(m), 1500); });
+    n.on('end', (m) => { this.endInfo = m; if (this.state === 'match' && this.session?.online) setTimeout(() => this.showResults(m), 600); });
     n.on('commentary', (m) => { if (this.state === 'match') this.commentary.show({ text: m.text, speaker: m.speaker, priority: m.priority, key: m.key }); });
     n.on('chat', (m) => this.ui.feed(`${m.from}: ${m.text}`));
     n.on('close', () => { if (this.state === 'match' && this.session?.online) this.ui.toast('Connection lost – trying to reconnect…'); });
@@ -356,6 +369,8 @@ export class Game {
       this.arena.update(dt, this.time, loud);
       this.crowd.update(dt, this.time);
       this.effects.update(dt);
+      this.confetti.update(dt, this.time);
+      this.announcer.update(dt);
       this.commentators.forEach((c) => c.update(dt));
       this.screens.update(dt, this.time, this.session?.view?.());
       const cam = this.renderer.camera;
@@ -368,7 +383,12 @@ export class Game {
   renderMatch(dt, view, look) {
     const byId = new Map(view.fighters.map((f) => [f.id, f]));
     this.byId = byId;
-    for (const f of view.fighters) this.views.get(f.id)?.update(dt, f);
+    for (const f of view.fighters) {
+      const t = f.target != null ? byId.get(f.target) : null;
+      f.lookAt = t && !t.hidden ? { x: t.x, y: t.y, z: t.z } : null;
+      this.views.get(f.id)?.update(dt, f);
+    }
+    if (view.match.phase === 'live' && !this.announcerLeft) { this.announcerLeft = true; this.announcer.goHome(); }
     this.itemViews.sync(view.items);
     this.referee.update(dt, view.referee);
     this.arena.updateRopes(dt, view.fighters);
@@ -381,7 +401,7 @@ export class Game {
       // broadcast intro: cut between the wrestlers while the bell is about to ring
       const order = view.fighters.filter((f) => !f.hidden && f.state !== 'apron');
       const t = this.introT = (this.introT || 0) + dt;
-      const idx = Math.min(order.length - 1, Math.floor(t / (3.0 / Math.max(1, order.length))));
+      const idx = Math.min(order.length - 1, Math.floor(t / (4.2 / Math.max(1, order.length))));
       const f = order[idx];
       if (f) this.camera.update(dt, { menu: { kind: 'showcase', subject: { x: f.x, y: f.y, z: f.z, height: f.c.height }, angle: f.yaw + 0.35 } });
     } else {
@@ -400,6 +420,11 @@ export class Game {
     const out = [];
     const st = me.state;
     const ab = ABILITIES[me.c.special];
+    if (['finished', 'over'].includes(view.match.phase)) {
+      return view.match.winners.includes(me.id)
+        ? [{ key: 'E', text: me.charId === 'ajan' && !me.ateFood ? 'Eat your food!' : 'Celebrate', hot: true }, { key: 'T', text: 'Taunt' }, { key: 'F', text: 'Climb turnbuckle' }, { key: 'ENTER', text: 'Results' }]
+        : [{ key: 'ENTER', text: 'Results' }];
+    }
     if (st === S.HELD) return [{ key: 'MASH', text: 'to escape' }, { key: 'Q', text: 'Reversal (quick!)', hot: me.stateTime < 0.3 }];
     if (st === S.PINNED) return [{ key: 'MASH J / K', text: 'KICK OUT!', hot: true }];
     if (st === S.DOWN || st === S.KNOCKDOWN) return [{ key: 'MASH', text: 'to get up faster' }];
@@ -537,7 +562,13 @@ export class Game {
           ui.banner(won ? 'VICTORY!' : 'WINNER', w, 4000);
           C.react('celebrate'); A.crowdPop(1.5);
           this.screens.flash(w);
+          this.celebrationFX(e, byId, view);
           break;
+        }
+        case 'celebrate': {
+          const f = byId.get(e.fighter);
+          if (f) { const fp = new THREE.Vector3(f.x, f.y + f.c.height * 0.85, f.z); A.play(e.eat ? 'munch' : 'grunt', fp, { pitch: f.c.voicePitch, volume: 1.1 }); A.crowdPop(0.7); C.react('pop', 0.6);
+            if (e.eat) { ui.feed('Ajan eats his food!'); [0.8, 1.55, 2.3, 3.05].forEach((d) => setTimeout(() => { const ff = this.byId?.get(e.fighter); if (!ff) return; const mp = new THREE.Vector3(ff.x, ff.y + ff.c.height * 0.8, ff.z); A.play('munch', mp); E.burst(mp, { n: 22, speed: 1.6, color: [0.95, 0.45, 0.1], size: 0.06, life: 0.9, additive: false, grav: 1.4 }); }, d * 1000)); } }
         }
         case 'time_up': ui.banner('TIME!', 'Decision by remaining health', 2000); break;
         case 'tag': ui.feed(`TAG! ${name(e.partner)} is legal`); C.react('pop', 0.5); A.crowdPop(0.5); A.play('block', null, { volume: 0.5 }); break;
@@ -550,6 +581,28 @@ export class Game {
         case 'env_damage': break;
       }
     }
+  }
+
+  /** Winner moment: confetti, pyro from the ring posts, announcer declares the winner. */
+  celebrationFX(e, byId, view) {
+    this.confetti.start(10);
+    const R = ARENA.ring;
+    [[1, 1], [-1, 1], [-1, -1], [1, -1]].forEach(([sx, sz], i) => setTimeout(() => {
+      const p = new THREE.Vector3(sx * R.postInset, R.height + R.postHeight + 0.1, sz * R.postInset);
+      for (let k = 0; k < 4; k++) setTimeout(() => this.effects.burst(p, { n: 40, speed: 6, color: [1, 0.75, 0.3], size: 0.07, life: 0.9, grav: 0.8, up: 2.5 }), k * 140);
+      this.audio.play('whoosh', p, { volume: 1.3 });
+    }, 300 + i * 120));
+    const winners = (e.winners || []).map((id) => byId.get(id)).filter(Boolean);
+    const names = winners.map((f) => getCharacter(f.charId).name);
+    const how = { pinfall: 'by pinfall', ko: 'by knockout', decision: 'by decision' }[e.method] || '';
+    const line = names.length > 1 ? `Here are your winners, ${how}... ${names.join(' and ')}!` : `Here is your winner, ${how}... ${names[0] || 'nobody'}!`;
+    setTimeout(() => {
+      if (this.state !== 'match') return;
+      const w0 = winners[0];
+      const ax = w0 ? Math.max(-2.4, Math.min(2.4, w0.x + 1.4)) : 0, az = w0 ? Math.max(-2.4, Math.min(2.4, w0.z)) : 0;
+      this.announcer.goTo(ax, R.height, az, Math.atan2(-ax, 6 - az));
+      this.commentary.announce(line); this.announcer.speak(4.5);
+    }, 2200);
   }
 
   refPos(view) { return new THREE.Vector3(view.referee.x, view.referee.y, view.referee.z); }

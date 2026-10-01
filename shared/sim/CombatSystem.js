@@ -150,6 +150,7 @@ export class CombatSystem {
       v.vx = dirX * kb; v.vz = dirZ * kb;
     } else if (reaction === 'knockdown' || reaction === 'launch') {
       this.knockDown(v, dirX * kb, up + (reaction === 'launch' ? 1.5 : 2.2), dirZ * kb, spec.downTime);
+      v.downTimer *= a.c.downTimeMul ?? 1;
     } else if (reaction === 'downhit') {
       v.downTimer = Math.max(v.downTimer, 0.6);
     } else {
