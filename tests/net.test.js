@@ -68,7 +68,13 @@ test('friend rooms: create → code → join → start → authoritative sync �
   const sa = await A.wait((m) => m.t === 'start'), sb = await B.wait((m) => m.t === 'start');
   assert.equal(sa.roster.length, 2);
   assert.notEqual(sa.you, sb.you);
-  await sleep(5000); // intro (4.5 s)
+  // skip the cinematic entrances (both humans vote), then let the 4.5 s intro pass
+  const phaseOf = (c) => c.snaps.at(-1)?.m?.p;
+  for (let i = 0; i < 160 && phaseOf(A) !== 'live'; i++) {
+    if (phaseOf(A) === 'entrances') { A.send({ t: 'skipEntrance' }); B.send({ t: 'skipEntrance' }); }
+    await sleep(100);
+  }
+  assert.equal(phaseOf(A), 'live', 'reached live after skipping entrances');
   const before = A.snaps.at(-1).f.find((f) => f[0] === sb.you);
   let seq = 0;
   for (let i = 0; i < 40; i++) { B.send({ t: 'input', seq: ++seq, mx: 0, mz: -1, held: 0, pressed: 0 }); await sleep(16); }

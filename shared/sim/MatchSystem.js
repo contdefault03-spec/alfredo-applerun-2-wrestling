@@ -2,23 +2,110 @@
 // knockouts/eliminations, tag teams, timer and win conditions. Also drives
 // the referee NPC (simulated so every client sees the same count).
 import { ARENA } from '../config/arena.js';
+import { getEntrance } from '../config/entrances.js';
 import { S, ZONE, DOWN_STATES } from './constants.js';
 import { setState, dist2D, isAlive, hpFrac, angleTo, turnToward } from './Fighter.js';
 
 const R = ARENA.ring;
 const INTRO_TIME = 4.5, FINISH_TIME = 16, COUNT_INTERVAL = 0.85;
+const ENTRANCE_GAP = 0.8;          // beat between one wrestler's entrance and the next
+const ENTRANCE_MAX = 32;           // hard safety cap per entrance (seconds)
 export const CELEBRATION_TIME = { ajan: 3.6, max: 2.6, lucky: 2.2, rot: 1.8, default: 2.4 };
 
 export class MatchSystem {
   constructor(world) {
     this.world = world;
-    this.phase = 'intro';
+    // optional cinematic wrestler entrances play out before the usual intro
+    this.entrancesEnabled = !!world.rules.entrances;
+    this.phase = this.entrancesEnabled ? 'entrances' : 'intro';
     this.phaseTime = 0;
     this.timeLeft = world.rules.timeLimit;
     this.pin = null;
     this.winnerTeam = null; this.winners = []; this.method = null;
     this.elimOrder = [];
     this.referee = { x: 0, y: R.height, z: -1.5, yaw: 0, zone: ZONE.RING, state: 'watch', count: 0, t: 0, focus: null };
+    // ── entrance state (authoritative; mirrored to clients in the snapshot) ──
+    this.entranceOrder = [];      // fighter ids, in entry order
+    this.entranceIndex = -1;      // -1 = not started yet
+    this.entranceTime = 0;        // seconds into the current wrestler's entrance
+    this.entranceDur = 0;         // current wrestler's authoritative entrance length
+    this.skipVotes = new Set();   // human fighter ids who voted to skip THIS entrance
+  }
+
+  /** The fighter currently making their entrance, or null. */
+  get currentEntrant() {
+    return this.phase === 'entrances' ? (this.entranceOrder[this.entranceIndex] ?? null) : null;
+  }
+
+  /** Human (non-AI) fighters that are actually participating right now. */
+  humanParticipants() {
+    return this.world.fighters.filter((f) => !f.isAI && !f.hidden && !f.eliminated);
+  }
+
+  /** Compact entrance state for the network snapshot (null when not in entrances). */
+  entranceState() {
+    if (this.phase !== 'entrances') return null;
+    const humans = this.humanParticipants().length;
+    return {
+      fighter: this.currentEntrant,
+      index: this.entranceIndex,
+      count: this.entranceOrder.length,
+      t: Math.round(this.entranceTime * 100) / 100,
+      dur: this.entranceDur,
+      votes: this.skipVotes.size,
+      need: humans,
+    };
+  }
+
+  beginEntrance(i) {
+    this.entranceIndex = i;
+    this.entranceTime = 0;
+    this.skipVotes.clear();
+    const id = this.entranceOrder[i];
+    const f = this.world.byId(id);
+    const dur = f ? getEntrance(f.charId).duration : 11;
+    this.entranceDur = Math.min(ENTRANCE_MAX, dur) + ENTRANCE_GAP;
+    this.world.emit('entrance_start', { fighter: id, index: i, count: this.entranceOrder.length });
+  }
+
+  /**
+   * A human player votes to skip the current entrance. Entrances only advance
+   * early when EVERY participating human has voted (AI never vote). One vote per
+   * player (a Set dedupes). Server-authoritative – clients only request.
+   */
+  voteSkipEntrance(fighterId) {
+    if (this.phase !== 'entrances') return false;
+    const f = this.world.byId(fighterId);
+    if (!f || f.isAI || f.hidden || f.eliminated) return false;
+    if (this.skipVotes.has(fighterId)) return false;
+    this.skipVotes.add(fighterId);
+    const humans = this.humanParticipants();
+    this.world.emit('skip_vote', { fighter: fighterId, votes: this.skipVotes.size, need: humans.length });
+    if (humans.length && humans.every((h) => this.skipVotes.has(h.id))) this.advanceEntrance();
+    return true;
+  }
+
+  advanceEntrance() {
+    const prev = this.currentEntrant;
+    if (prev != null) this.world.emit('entrance_end', { fighter: prev, index: this.entranceIndex });
+    if (this.entranceIndex + 1 < this.entranceOrder.length) {
+      this.beginEntrance(this.entranceIndex + 1);
+    } else {
+      this.phase = 'intro'; this.phaseTime = 0;
+      this.world.emit('entrances_done', {});
+    }
+  }
+
+  updateEntrances(dt) {
+    if (this.entranceIndex < 0) {
+      // lazily build the order the first time we tick in the entrances phase
+      this.entranceOrder = this.world.fighters.filter((f) => !f.hidden && !f.eliminated).map((f) => f.id);
+      if (!this.entranceOrder.length) { this.phase = 'intro'; this.phaseTime = 0; return; }
+      this.beginEntrance(0);
+      return;
+    }
+    this.entranceTime += dt;
+    if (this.entranceTime >= this.entranceDur) this.advanceEntrance();
   }
 
   // ── setup ──
@@ -52,6 +139,7 @@ export class MatchSystem {
   }
 
   frozen(f) {
+    if (this.phase === 'entrances') return true;
     if (this.phase === 'intro') return true;
     // after the bell winners stay in control (walk around, taunt, celebrate); everyone else stops
     if (this.phase === 'finished' || this.phase === 'over') return !this.winners.includes(f.id) && f.state !== S.AIRBORNE && f.state !== S.KNOCKDOWN;
@@ -62,6 +150,11 @@ export class MatchSystem {
   update(dt) {
     const w = this.world;
     this.phaseTime += dt;
+    if (this.phase === 'entrances') {
+      this.updateEntrances(dt);
+      this.updateReferee(dt);
+      return;
+    }
     if (this.phase === 'intro') {
       if (this.phaseTime >= INTRO_TIME) { this.phase = 'live'; this.phaseTime = 0; w.emit('bell', {}); w.emit('match_start', { mode: w.rules.id }); }
     } else if (this.phase === 'live') {

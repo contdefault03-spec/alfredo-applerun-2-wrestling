@@ -7,6 +7,7 @@ import { GAME_MODES } from '@shared/config/gameModes.js';
 import { ABILITIES } from '@shared/config/abilities.js';
 import { ITEMS } from '@shared/config/items.js';
 import { ARENA } from '@shared/config/arena.js';
+import { winnerAnnounceLine } from '@shared/config/entrances.js';
 import { S, BTN } from '@shared/sim/constants.js';
 import { Settings } from './Settings.js';
 import { Input } from './Input.js';
@@ -19,6 +20,7 @@ import { ItemViews } from '../render/ItemViews.js';
 import { Effects, Confetti } from '../render/Effects.js';
 import { Referee, Commentator, Announcer } from '../render/NPCs.js';
 import { ScreenDirector } from '../render/ScreenDirector.js';
+import { EntranceDirector } from '../render/EntranceDirector.js';
 import { CameraSystem } from '../camera/CameraSystem.js';
 import { AudioSystem } from '../audio/AudioSystem.js';
 import { CommentarySystem } from '../commentary/CommentarySystem.js';
@@ -78,6 +80,12 @@ export class Game {
     this.confetti = new Confetti(this.scene);
     this.commentary = new CommentarySystem({ ui: this.ui, audio: this.audio, settings: this.settings, commentators: this.commentators });
     this.screens = new ScreenDirector(this.arena);
+    this.entranceDir = new EntranceDirector({
+      scene: this.scene, camera: this.camera, audio: this.audio, arena: this.arena,
+      screens: this.screens, commentary: this.commentary, ui: this.ui, views: this.views,
+    });
+    this.entranceDir.getSession = () => this.session;
+    this.entranceDir.getNet = () => this.net;
     this.renderer.renderer.compile(this.scene, this.renderer.camera);
     this.loop();
     this.ui.loading(0.15, 'Loading wrestlers…');
@@ -161,7 +169,7 @@ export class Game {
     const me = charOverride || s.lastChar;
     const fighters = [{ charId: me, team: 0, name: s.name || getCharacter(me).name, isAI: false }, ...slots.map((sl) => ({ charId: sl.charId, team: sl.team, isAI: true, difficulty: sl.difficulty }))];
     this.lastLocal = { mode, slots, charOverride };
-    const session = new LocalSession({ mode, fighters }, 1);
+    const session = new LocalSession({ mode, fighters, entrances: true }, 1);
     this.beginMatch(session);
     this.commentary.startLocal(session.world);
   }
@@ -205,6 +213,7 @@ export class Game {
   }
 
   endMatchCleanup() {
+    this.entranceDir?.stop();
     if (this.session) { this.session.dispose?.(); this.session = null; }
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
@@ -347,9 +356,10 @@ export class Game {
     if (this.state === 'match' && this.session) {
       const is = this.inputState;
       is.mx = inp.mx; is.mz = inp.mz; is.held = inp.held; is.pressed |= inp.pressed;
+      const pressedThisFrame = inp.pressed;
       this.session.update(dt, is);
       const view = this.session.view();
-      this.renderMatch(dt, view, inp.look);
+      this.renderMatch(dt, view, inp.look, pressedThisFrame);
     } else {
       // menus: showcase wrestler + orbiting camera
       if (this.showcase) {
@@ -380,13 +390,18 @@ export class Game {
     this.renderer.render(dt, this.time);
   }
 
-  renderMatch(dt, view, look) {
+  renderMatch(dt, view, look, pressed = 0) {
     const byId = new Map(view.fighters.map((f) => [f.id, f]));
     this.byId = byId;
+    // cinematic wrestler entrances (authoritative state → client choreography)
+    const en = this.entranceDir.resolve(view);
+    if (en) this.entranceDir.applyPositions(view, en, dt);
+    else if (this.entranceDir.active) this.entranceDir.stop();
     for (const f of view.fighters) {
       const t = f.target != null ? byId.get(f.target) : null;
       f.lookAt = t && !t.hidden ? { x: t.x, y: t.y, z: t.z } : null;
-      this.views.get(f.id)?.update(dt, f);
+      const fv = this.views.get(f.id);
+      if (fv) { fv.update(dt, f); if (fv.root) fv.root.visible = en ? !f._entranceHidden : true; }
     }
     if (view.match.phase === 'live' && !this.announcerLeft) { this.announcerLeft = true; this.announcer.goHome(); }
     this.itemViews.sync(view.items);
@@ -397,6 +412,10 @@ export class Game {
     if (!this.session.online) this.commentary.update(dt, events);
     const me = byId.get(view.localId);
     const opp = me && me.target != null ? byId.get(me.target) : null;
+    if (en) {
+      this.entranceDir.update(dt, view, en, byId, { pressed });
+      return; // entrances own the camera / titantron / prompt this frame
+    }
     if (view.match.phase === 'intro') {
       // broadcast intro: cut between the wrestlers while the bell is about to ring
       const order = view.fighters.filter((f) => !f.hidden && f.state !== 'apron');
@@ -594,8 +613,8 @@ export class Game {
     }, 300 + i * 120));
     const winners = (e.winners || []).map((id) => byId.get(id)).filter(Boolean);
     const names = winners.map((f) => getCharacter(f.charId).name);
-    const how = { pinfall: 'by pinfall', ko: 'by knockout', decision: 'by decision' }[e.method] || '';
-    const line = names.length > 1 ? `Here are your winners, ${how}... ${names.join(' and ')}!` : `Here is your winner, ${how}... ${names[0] || 'nobody'}!`;
+    // "AND THE WINNER IS... RIZE!" – a clean, theatrical ring-announcer line.
+    const line = winnerAnnounceLine(names, e.method);
     setTimeout(() => {
       if (this.state !== 'match') return;
       const w0 = winners[0];

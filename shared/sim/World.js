@@ -20,7 +20,7 @@ export class World {
    */
   constructor(cfg) {
     const mode = GAME_MODES[cfg.mode] || GAME_MODES.normal;
-    this.rules = { ...mode, friendlyFire: false, ...(cfg.rules || {}) };
+    this.rules = { ...mode, friendlyFire: false, entrances: !!cfg.entrances, ...(cfg.rules || {}) };
     this.time = 0; this.tick = 0;
     this.events = [];
     this.arena = new Arena({ cage: !!this.rules.cage });

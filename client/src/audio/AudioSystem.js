@@ -246,6 +246,32 @@ export class AudioSystem {
     } catch (e) { console.warn('voice decode failed', e); return false; }
   }
 
+  /**
+   * Play an entrance song (streamed via a <video>/<audio> element so big MP3s
+   * don't block). Routed through the music bus when Web Audio is up so master/
+   * music volume and compression apply. Returns a handle with stop().
+   */
+  playEntranceSong(url) {
+    let el;
+    try {
+      el = new Audio(url);
+      el.crossOrigin = 'anonymous';
+      el.loop = false;
+      const s = this.settings.get();
+      el.volume = Math.max(0, Math.min(1, (s.musicVolume ?? 0.6) * (s.masterVolume ?? 1)));
+      if (this.ctx && this.music) {
+        try {
+          const src = this.ctx.createMediaElementSource(el);
+          const g = this.ctx.createGain(); g.gain.value = 1.0;
+          src.connect(g).connect(this.music);
+          el.volume = 1; // bus handles level now
+        } catch { /* element already wired / unsupported – fall back to el.volume */ }
+      }
+      el.play().catch(() => { /* autoplay deferred until a gesture */ });
+    } catch { return null; }
+    return { el, stop() { try { el.pause(); el.src = ''; } catch { /* ignore */ } } };
+  }
+
   // ── crowd ambience ──
   startCrowd() {
     const c = this.ctx;

@@ -96,6 +96,7 @@ export class Room {
       case 'removeAI': if (isHost && this.state === 'lobby') { this.ai.splice(msg.index | 0, 1); this.pushState(); } break;
       case 'start': if (isHost) { const err = this.startMatch(); if (err) this.send(p, { t: 'error', message: err }); } break;
       case 'backToLobby': if (isHost && this.state !== 'lobby') { this.stopMatch(); this.pushState(); } break;
+      case 'skipEntrance': if (this.world && p.fighterId != null) this.world.match.voteSkipEntrance(p.fighterId); break;
       case 'input': {
         if (!this.world || p.fighterId == null) break;
         const f = this.world.byId(p.fighterId);
@@ -133,7 +134,7 @@ export class Room {
     if (m.teams === 'two') entrants.forEach((e, i) => { if (e.team > 1) e.team = i % 2; });
     const teams = new Set(entrants.map((e) => e.team));
     if (teams.size < 2) return 'Put at least two different teams in the match';
-    this.world = new World({ mode: this.mode, fighters: entrants.map(({ player, ...e }) => e) });
+    this.world = new World({ mode: this.mode, entrances: true, fighters: entrants.map(({ player, ...e }) => e) });
     entrants.forEach((e, i) => { if (e.player) { e.player.fighterId = this.world.fighters[i].id; e.player.lastSeq = 0; } });
     this.state = 'match';
     this.commentary = new CommentaryEngine({
