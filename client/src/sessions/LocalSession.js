@@ -50,7 +50,7 @@ export class LocalSession {
       v.itemType = it ? it.type : null;
       return v;
     });
-    return { fighters, items: w.items.items, referee: w.match.referee, match: w.match, rules: w.rules, localId: this.localId, time: w.time };
+    return { fighters, items: w.items.items, referee: w.match.referee, match: w.match, ring: w.ring.encode(), rules: w.rules, localId: this.localId, time: w.time };
   }
 
   abilityStatus(f) { return this.world.abilities.status(f); }

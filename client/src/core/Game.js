@@ -407,6 +407,7 @@ export class Game {
     this.itemViews.sync(view.items);
     this.referee.update(dt, view.referee);
     this.arena.updateRopes(dt, view.fighters);
+    this.arena.updateRingDamage(view.ring);
     const events = this.session.takeEvents();
     this.processEvents(events, byId, view);
     if (!this.session.online) this.commentary.update(dt, events);

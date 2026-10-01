@@ -41,4 +41,14 @@ export const SNAPSHOT_RATE = 20;
 export const HEAL_DELAY = 10;     // seconds since the last damage taken
 export const HEAL_RATE = 0.025;   // fraction of max HP regained per second (~slow)
 
+// Localized ring destruction: the canvas is a RING_GRID×RING_GRID grid of
+// sections. Heavy impacts in the same section crack it (2 hits) then break a
+// hole (RING_BREAK_HITS). Only very heavy wrestlers (Ajan) register impacts.
+export const RING_GRID = 3;
+export const RING_BREAK_HITS = 3;      // impacts in one section to break it
+export const HEAVY_SLAM_WEIGHT = 180;  // kg; only slams from this heavy count
+export const FALL_DEPTH = 1.7;         // how far below the canvas a hole drops to
+export const FALL_RECOVER = 2.4;       // seconds down in the hole before climbing out
+export const FALL_DAMAGE = 70;         // damage from crashing through the ring
+
 export const ZONE = { RING: 'ring', FLOOR: 'floor', APRON: 'apron' };

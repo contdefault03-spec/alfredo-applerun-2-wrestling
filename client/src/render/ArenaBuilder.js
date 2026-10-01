@@ -5,6 +5,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ARENA } from '@shared/config/arena.js';
+import { RING_GRID } from '@shared/sim/constants.js';
+import { CELL, cellCenter, levelFromHits } from '@shared/sim/RingDestruction.js';
 import * as TX from './Textures.js';
 
 const R = ARENA.ring;
@@ -202,6 +204,41 @@ export class ArenaView {
     add(this.group, mergeGeometries(railGeos), rail);
     this.barricadeMeshes = [bm];
     this.buildAds();
+    this.buildRingDamage();
+  }
+
+  // ── ring destruction overlays (cracks + holes), toggled from the snapshot ──
+  buildRingDamage() {
+    this.ringDmgCells = [];
+    this.ringDmgState = [];
+    const crackMat = new THREE.MeshBasicMaterial({ color: 0x0c0c10, transparent: true, opacity: 0.6, toneMapped: false });
+    const holeMat = new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false });
+    this._ringDmgMats = { crack: crackMat, hole: holeMat };
+    const geo = new THREE.PlaneGeometry(CELL * 0.96, CELL * 0.96).rotateX(-Math.PI / 2);
+    for (let k = 0; k < RING_GRID * RING_GRID; k++) {
+      const c = cellCenter(k);
+      const m = new THREE.Mesh(geo, crackMat);
+      m.position.set(c.x, R.height + 0.02, c.z);
+      m.visible = false; m.castShadow = false; m.receiveShadow = false;
+      this.group.add(m);
+      this.ringDmgCells.push(m);
+      this.ringDmgState.push(0);
+    }
+  }
+
+  /** Update crack/hole overlays from the authoritative hit-count array. */
+  updateRingDamage(cells) {
+    if (!cells || !this.ringDmgCells) return;
+    for (let k = 0; k < this.ringDmgCells.length; k++) {
+      const lvl = levelFromHits(cells[k] || 0);
+      if (lvl === this.ringDmgState[k]) continue;
+      this.ringDmgState[k] = lvl;
+      const m = this.ringDmgCells[k];
+      if (lvl === 0) { m.visible = false; continue; }
+      m.visible = true;
+      m.material = lvl === 2 ? this._ringDmgMats.hole : this._ringDmgMats.crack;
+      m.position.y = lvl === 2 ? R.height - 0.06 : R.height + 0.02; // a hole sits below the canvas
+    }
   }
 
   // ── ringside advertising hoardings on the barricades (face the ring) ──

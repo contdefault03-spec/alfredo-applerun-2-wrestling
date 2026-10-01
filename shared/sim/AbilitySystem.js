@@ -155,6 +155,7 @@ export class AbilitySystem {
     w.items.checkTableBreak(f, 12);
     const pos = { x: f.x, y: f.y, z: f.z };
     w.emit('impact', { fighter: f.id, pos, power: 1.0, ring: f.zone === ZONE.RING });
+    if (ab.id === 'ajan_crush' && f.zone === ZONE.RING) w.ring?.registerImpact(pos.x, pos.z);
     if (victims.length) {
       // the event the client uses to play Ajan.mp3 + the cinematic camera
       w.emit('special_hit', { fighter: f.id, ability: ab.id, name: ab.name, victims, pos, sound: ab.sound, event: ab.hitEvent, damage: ab.damage });
