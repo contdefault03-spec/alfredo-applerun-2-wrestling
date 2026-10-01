@@ -27,6 +27,8 @@ export class EntranceDirector {
     this.active = false;
     this._mediaFor = null;      // fighter id whose media is playing
     this._announced = false;
+    this._coatThrown = false;   // Max's coat/hat/glasses toss done this entrance
+    this._props = [];           // flying entrance props (coat etc.)
     this._song = null;
     this.video = null;
     this.getSession = null;     // set by Game: () => current session
@@ -94,9 +96,16 @@ export class EntranceDirector {
     const charId = f?.charId;
     if (en.fighterId != null && en.fighterId !== this._mediaFor) {
       this.startMedia(charId);
-      this._mediaFor = en.fighterId; this._announced = false;
+      this._mediaFor = en.fighterId; this._announced = false; this._coatThrown = false;
     }
     this.drawTron(charId, en);
+
+    // Max flings his coat/hat/glasses into the crowd mid-ramp
+    if (charId && !this._coatThrown && en.p > 0.5 && getEntrance(charId).coatThrow && f) {
+      this._coatThrown = true;
+      this.throwCoat(f);
+    }
+    this.updateProps(dt);
 
     // ring announcer introduces the wrestler as they reach the ring
     if (!this._announced && en.p > 0.8 && charId) {
@@ -113,6 +122,38 @@ export class EntranceDirector {
 
     // skip prompt + vote tally
     this.ui.prompt?.(`PRESS J TO SKIP   ·   SKIP VOTES ${en.votes}/${Math.max(1, en.need)}`);
+  }
+
+  /** Max tears off his coat, hat and glasses and hurls them to the crowd. */
+  throwCoat(f) {
+    const mk = (geo, color, vx, vy, vz) => {
+      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0.1 }));
+      m.position.set(f.x, (f.y || 0) + 1.4, f.z);
+      m.castShadow = false;
+      this.scene.add(m);
+      this._props.push({ mesh: m, vx, vy, vz, spin: (Math.random() - 0.5) * 12, life: 2.2 });
+    };
+    // toward the crowd (back toward the entrance / stands) with upward arc + spread
+    mk(new THREE.BoxGeometry(0.55, 0.7, 0.12), 0x15161c, (Math.random() - 0.5) * 2, 6.2, 4.6);   // coat
+    mk(new THREE.CylinderGeometry(0.17, 0.2, 0.14, 12), 0x0a0a0d, 1.6, 6.8, 3.4);                  // hat
+    mk(new THREE.BoxGeometry(0.3, 0.06, 0.06), 0x050507, -1.8, 6.0, 3.0);                          // glasses
+    this.audio.crowdPop?.(1.4);       // the crowd (the "screams") erupts
+    this.camera.punch?.(5);
+  }
+
+  updateProps(dt) {
+    if (!this._props.length) return;
+    for (const p of this._props) {
+      p.life -= dt;
+      p.vy -= 16 * dt; // gravity
+      p.mesh.position.x += p.vx * dt; p.mesh.position.y += p.vy * dt; p.mesh.position.z += p.vz * dt;
+      p.mesh.rotation.x += p.spin * dt; p.mesh.rotation.z += p.spin * 0.6 * dt;
+    }
+    this._props = this._props.filter((p) => {
+      if (p.life > 0 && p.mesh.position.y > -2) return true;
+      this.scene.remove(p.mesh); p.mesh.geometry.dispose?.(); p.mesh.material.dispose?.();
+      return false;
+    });
   }
 
   voteSkip(view) {
@@ -182,7 +223,9 @@ export class EntranceDirector {
     if (!this.active && !this._song && !this.video) return;
     this.active = false;
     this.screens.suspended = false;
-    this._mediaFor = null; this._announced = false;
+    this._mediaFor = null; this._announced = false; this._coatThrown = false;
+    for (const p of this._props) { try { this.scene.remove(p.mesh); p.mesh.geometry.dispose?.(); p.mesh.material.dispose?.(); } catch { /* ignore */ } }
+    this._props = [];
     try { this._song?.stop?.(); } catch { /* ignore */ }
     this._song = null;
     try { this.video?.pause?.(); if (this.video) this.video.src = ''; } catch { /* ignore */ }
