@@ -1,0 +1,7 @@
+node_modules/
+dist/
+tools/scratch/
+tests/scratch_*.mjs
+.env
+*.log
+.DS_Store

@@ -1,0 +1,32 @@
+{
+  "name": "ring-kings-wrestling",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser 3D multiplayer wrestling game (Three.js client + authoritative Node WebSocket server)",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "node tools/dev.mjs",
+    "dev:client": "vite --config client/vite.config.js",
+    "dev:server": "node --watch server/index.js",
+    "build": "vite build --config client/vite.config.js",
+    "start": "node server/index.js",
+    "assets": "node tools/process-assets.mjs",
+    "test": "node --test tests/"
+  },
+  "dependencies": {
+    "three": "^0.186.1",
+    "vite": "^8.3.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "meshoptimizer": "^1.3.0",
+    "playwright-core": "^1.63.0",
+    "sharp": "^0.35.5"
+  }
+}

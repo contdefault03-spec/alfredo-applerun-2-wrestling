@@ -1,0 +1,25 @@
+<!doctype html><html><body style="margin:0;background:#333">
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const ids = (q.get('ids')||'max,masked,ajan,rise,cave,rot,lucky').split(',');
+const view = q.get('view')||'front';
+const T=+(q.get('t')||360); const r = new THREE.WebGLRenderer({antialias:true}); r.setSize(T*ids.length,T); r.setScissorTest(true); document.body.appendChild(r.domElement);
+const L=new GLTFLoader(); let n=0; const scenes=[];
+function grid(){ const g=new THREE.Group(); const m1=new THREE.LineBasicMaterial({color:0x335533}), m2=new THREE.LineBasicMaterial({color:0xff4444});
+ for(let i=-12;i<=24;i++){ const v=i*0.05; const mat=i%2===0?m2:m1;
+  g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.6,v,0),new THREE.Vector3(0.6,v,0)]),mat));
+  g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(v,-0.1,0),new THREE.Vector3(v,1.1,0)]),mat)); }
+ return g; }
+ids.forEach((id,i)=>L.load('/assets/characters/'+id+'.glb',g=>{
+  const s = new THREE.Scene(); s.background=new THREE.Color(0x777777);
+  s.add(new THREE.HemisphereLight(0xffffff,0x444444,2)); const d=new THREE.DirectionalLight(0xffffff,2); d.position.set(1,2,3); s.add(d);
+  s.add(g.scene); g.scene.traverse(o=>{if(o.material){o.material.transparent=true;o.material.opacity=+(q.get('op')||1);}});
+  const gr=grid(); s.add(gr); if(view==='side'){gr.rotation.y=Math.PI/2;}
+  gr.position[view==='side'?'x':'z']=-0.3;
+  const c = new THREE.OrthographicCamera(-0.6,0.6,0.6,-0.6,0.1,50);
+  if(view==='side') c.position.set(5,0.5,0); else c.position.set(0,0.5,5);
+  c.lookAt(0,0.5,0); c.updateProjectionMatrix();
+  scenes[i]={s,c}; if(++n===ids.length){ scenes.forEach((o,k)=>{r.setViewport(k*T,0,T,T);r.setScissor(k*T,0,T,T);r.render(o.s,o.c);}); window.done=true;} }));
+</script></body></html>

@@ -1,0 +1,36 @@
+<!doctype html><html><body style="margin:0;background:#333">
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { autoRig } from '/src/anim/AutoRig.js';
+import { PoseSolver, newPose, set } from '/src/anim/PoseSolver.js';
+import { CHARACTERS } from '@shared/config/characters.js';
+const q = new URLSearchParams(location.search);
+const ids = (q.get('ids')||'max,masked,ajan,rise,cave,rot,lucky').split(',');
+const poseName = q.get('pose')||'guard';
+const T=+(q.get('t')||360); const r = new THREE.WebGLRenderer({antialias:true}); r.setSize(T*ids.length,T); r.setScissorTest(true); document.body.appendChild(r.domElement);
+const POSES = {
+  rest: p=>{ set(p,'handL',[1,0,0]); },
+  guard: p=>{ set(p,'hipsOff',[0,-0.06,0]); set(p,'spine',[0.08,0,0]); set(p,'handL',[-0.05,0.05,0.5]); set(p,'handR',[-0.1,0,0.42]); set(p,'spaceL',1); set(p,'spaceR',1);
+    set(p,'elbowL',[0.4,-1,-0.2]); set(p,'elbowR',[0.4,-1,-0.2]); set(p,'footL',[0.05,0,0.15]); set(p,'footR',[0.1,0,-0.18]); },
+  jab: p=>{ POSES.guard(p); set(p,'handR',[-0.12,0.08,1.0]); set(p,'chest',[0.05,0.35,0]); },
+  kick: p=>{ POSES.guard(p); set(p,'footR',[0.05,0.55,0.75]); set(p,'hipsRot',[-0.25,0,0]); },
+  overhead: p=>{ POSES.guard(p); set(p,'handL',[-0.1,1.0,0.1]); set(p,'handR',[-0.1,1.0,0.1]); set(p,'chest',[-0.2,0,0]); },
+  down: p=>{ set(p,'handL',[0.3,-0.8,0.1]); set(p,'handR',[0.3,-0.8,0.1]); set(p,'footL',[0.05,0,0.0]); set(p,'footR',[0.05,0,0]); set(p,'hipsOff',[0,-0.25,0.1]); set(p,'spine',[0.3,0,0]);},
+};
+const L=new GLTFLoader(); let n=0; const scenes=[];
+ids.forEach((id,i)=>L.load('/'+CHARACTERS[id].model,g=>{
+  let src; g.scene.traverse(o=>{ if(o.isMesh) src=o; }); g.scene.updateMatrixWorld(true);
+  const rig = autoRig(src, CHARACTERS[id].rig); { const si=rig.mesh.geometry.attributes.skinIndex, sw=rig.mesh.geometry.attributes.skinWeight; const cnt={}; for(let k=0;k<si.count;k++){ const nm=rig.mesh.skeleton.bones[si.getX(k)].name; cnt[nm]=(cnt[nm]||0)+1;} console.log(id, JSON.stringify(cnt)); }
+  const solver = new PoseSolver(rig);
+  const p = newPose(); (POSES[poseName]||POSES.guard)(p); if(poseName!=='rest') solver.apply(p);
+  const s = new THREE.Scene(); s.background=new THREE.Color(0x777777);
+  s.add(new THREE.HemisphereLight(0xffffff,0x444444,2)); const d=new THREE.DirectionalLight(0xffffff,2); d.position.set(1,2,3); s.add(d);
+  s.add(rig.mesh);
+  if(q.get('weights')){ const cols=new Float32Array(rig.mesh.geometry.attributes.position.count*3); const pal=[...Array(17)].map((_,k)=>new THREE.Color().setHSL(k/17,0.9,0.5));
+    const si=rig.mesh.geometry.attributes.skinIndex; for(let k=0;k<si.count;k++){const c=pal[si.getX(k)]; cols.set([c.r,c.g,c.b],k*3);} rig.mesh.geometry.setAttribute('color',new THREE.BufferAttribute(cols,3)); rig.mesh.material=new THREE.MeshLambertMaterial({vertexColors:true, skinning:true}); }
+  const c = new THREE.PerspectiveCamera(30,1,0.1,50);
+  const view=q.get('view')||'q'; if(view==='front') c.position.set(0,0.55,3.2); else if(view==='side') c.position.set(3.2,0.55,0); else c.position.set(2,0.8,2.5);
+  c.lookAt(0,0.45,0);
+  scenes[i]={s,c}; if(++n===ids.length){ scenes.forEach((o,k)=>{r.setViewport(k*T,0,T,T);r.setScissor(k*T,0,T,T);r.render(o.s,o.c);}); window.done=true;} }));
+</script></body></html>
