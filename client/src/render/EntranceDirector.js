@@ -121,7 +121,7 @@ export class EntranceDirector {
     }
 
     // skip prompt + vote tally
-    this.ui.prompt?.(`PRESS J TO SKIP   ·   SKIP VOTES ${en.votes}/${Math.max(1, en.need)}`);
+    this.ui.prompt?.([{ key: 'J', text: `SKIP ENTRANCE   (votes ${en.votes}/${Math.max(1, en.need)})`, hot: true }]);
   }
 
   /** Max tears off his coat, hat and glasses and hurls them to the crowd. */

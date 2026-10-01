@@ -439,7 +439,7 @@ export class Game {
     const ref = view.referee;
     this._canGrabRef = !!(me && ref && ref.state === 'warn' && ref.warnTarget === view.localId
       && Math.hypot(ref.x - me.x, ref.z - me.z) <= REF_GRAB_RANGE);
-    if (this._canGrabRef) this.ui.prompt('E — GRAB REFEREE');
+    if (this._canGrabRef) this.ui.prompt([{ key: 'E', text: 'GRAB REFEREE', hot: true }]);
     else if (me) this.ui.prompt(this.prompts(me, view));
     if (!this.session.online && view.match.phase === 'over' && !this.resultsShown) {
       this.showResults({ winners: view.match.winners, method: view.match.method });
