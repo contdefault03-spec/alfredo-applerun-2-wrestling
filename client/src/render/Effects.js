@@ -18,12 +18,12 @@ class ParticlePool {
     g.setAttribute('aAlpha', new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage));
     this.geo = g;
     const m = new THREE.ShaderMaterial({
-      uniforms: { uTex: { value: glowTexture() }, uScale: { value: 600 } },
+      uniforms: { uTex: { value: glowTexture() }, uScale: { value: 600 }, uAlpha: { value: additive ? 1 : 0.45 } },
       transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending, vertexColors: true,
       vertexShader: `attribute float aSize; attribute float aAlpha; varying vec3 vC; varying float vA; uniform float uScale;
         void main(){ vC = color; vA = aAlpha; vec4 mv = modelViewMatrix * vec4(position,1.); gl_PointSize = aSize * uScale / -mv.z; gl_Position = projectionMatrix * mv; }`,
-      fragmentShader: `uniform sampler2D uTex; varying vec3 vC; varying float vA;
-        void main(){ vec4 t = texture2D(uTex, gl_PointCoord); gl_FragColor = vec4(vC, t.a * vA); if (gl_FragColor.a < 0.01) discard; }`,
+      fragmentShader: `uniform sampler2D uTex; uniform float uAlpha; varying vec3 vC; varying float vA;
+        void main(){ vec4 t = texture2D(uTex, gl_PointCoord); gl_FragColor = vec4(vC, t.a * vA * uAlpha); if (gl_FragColor.a < 0.01) discard; }`,
     });
     this.points = new THREE.Points(g, m); this.points.frustumCulled = false; this.points.renderOrder = 6;
     scene.add(this.points);
@@ -87,18 +87,18 @@ export class Effects {
   // ── semantic effects ──
   hit(p, { heavy = false, weapon = false, sound = 'punch' } = {}) {
     this.burst(p, { n: heavy ? 22 : 10, speed: heavy ? 4 : 2.5, color: [1, 0.95, 0.85], size: heavy ? 0.12 : 0.08, life: 0.25 });
-    this.burst(p, { n: heavy ? 10 : 5, speed: 2, color: [0.75, 0.85, 1], size: 0.04, life: 0.6, additive: false, grav: 1 }); // sweat
+    this.burst(p, { n: heavy ? 8 : 4, speed: 2.2, color: [0.75, 0.85, 1], size: 0.03, life: 0.45, additive: true, grav: 1.6 }); // sweat
     if (weapon || sound === 'metal' || sound === 'bell') this.burst(p, { n: 26, speed: 6, color: [1, 0.7, 0.25], size: 0.05, life: 0.35, grav: 1.2 });
     if (sound === 'food') this.burst(p, { n: 34, speed: 4, color: [0.95, 0.35, 0.08], size: 0.07, life: 0.9, additive: false, grav: 1.4 });
     if (sound === 'wood') this.burst(p, { n: 10, speed: 3, color: [0.8, 0.65, 0.4], size: 0.05, life: 0.6, additive: false, grav: 1.2 });
     if (heavy) this.lightFlash(p, 25);
   }
   slam(p, power = 1) {
-    this.burst({ x: p.x, y: p.y + 0.05, z: p.z }, { n: Math.round(30 * power), speed: 3 * power, color: [0.75, 0.72, 0.68], size: 0.18, life: 0.7, additive: false, grav: 0.1, up: 0.3 });
+    this.burst({ x: p.x, y: p.y + 0.05, z: p.z }, { n: Math.round(18 * power), speed: 2.5 * power, color: [0.55, 0.52, 0.5], size: 0.16, life: 0.5, additive: false, grav: 0.4, up: 0.2 });
     this.ring(p, 2.2 * power, 0.45);
   }
   crush(p) {
-    this.burst({ x: p.x, y: p.y + 0.1, z: p.z }, { n: 90, speed: 7, color: [0.8, 0.75, 0.7], size: 0.25, life: 1.0, additive: false, grav: 0.15, up: 0.4 });
+    this.burst({ x: p.x, y: p.y + 0.1, z: p.z }, { n: 60, speed: 7, color: [0.6, 0.56, 0.52], size: 0.25, life: 0.8, additive: false, grav: 0.4, up: 0.3 });
     this.burst({ x: p.x, y: p.y + 0.4, z: p.z }, { n: 60, speed: 6, color: [1, 0.8, 0.5], size: 0.12, life: 0.5 });
     this.burst({ x: p.x, y: p.y + 0.6, z: p.z }, { n: 50, speed: 5, color: [0.95, 0.35, 0.08], size: 0.08, life: 1.1, additive: false, grav: 1.3 });
     this.ring(p, 6, 0.7, 0xffc080); this.ring(p, 3.5, 0.5, 0xffffff);

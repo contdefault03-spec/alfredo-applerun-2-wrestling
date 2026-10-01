@@ -118,7 +118,7 @@ export class CombatSystem {
     v.hp = Math.max(0, v.hp - dmg);
     v.lastHitBy = a.id; v.lastHitTime = w.time;
     a.stats.damage += dmg; a.stats.hits++;
-    a.meter = Math.min(100, a.meter + dmg * 0.09);
+    a.meter = Math.min(100, a.meter + dmg * (spec.special ? 0.02 : 0.09));
     v.meter = Math.min(100, v.meter + dmg * 0.05);
     v.staminaDelay = 0.3;
 

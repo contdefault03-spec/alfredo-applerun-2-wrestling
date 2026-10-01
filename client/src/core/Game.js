@@ -85,7 +85,10 @@ export class Game {
     this.ui.hideLoading();
     const qs = new URLSearchParams(location.search);
     if (qs.get('room')) { this.showMainMenu(); this.friendMenu(qs.get('room')); }
-    else if (qs.get('autostart')) this.startLocalMatch(qs.get('mode') || 'normal', [{ charId: qs.get('opp') || 'lucky', team: 1, difficulty: qs.get('diff') || 'normal' }], qs.get('char') || undefined);
+    else if (qs.get('autostart')) {
+      const opps = (qs.get('opp') || 'lucky').split(','), teams = (qs.get('teams') || '').split(',').filter(Boolean).map(Number);
+      this.startLocalMatch(qs.get('mode') || 'normal', opps.map((c, i) => ({ charId: c, team: teams[i] ?? i + 1, difficulty: qs.get('diff') || 'normal' })), qs.get('char') || undefined);
+    }
     else this.showMainMenu();
   }
 

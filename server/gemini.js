@@ -8,7 +8,7 @@
 //   GEMINI_RPM            global requests/minute budget for text (default 40)
 import { buildPrompt } from '../shared/commentary/CommentaryEngine.js';
 
-const API = 'https://generativelanguage.googleapis.com/v1beta/models';
+const API = (process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '') + '/models';
 
 class RateLimiter {
   constructor(perMinute) { this.per = perMinute; this.hits = new Map(); }

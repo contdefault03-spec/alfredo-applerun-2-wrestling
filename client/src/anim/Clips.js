@@ -40,22 +40,25 @@ export function mirror(o) {
   return r;
 }
 
-// strike helper: windup W, extension X, optional follow-through F
-const strike = (W, X, F = null) => [[0, {}], ['S', W], ['M', X], ['A', X], ...(F ? [['R', F]] : []), [1, {}]];
+// strike helper: windup W, extension X, optional follow-through F.
+// The striking hand's extension is in ROOT space so the fist drives straight
+// at the target even while the torso twists (chest space would swing it sideways).
+const rootHands = (o) => ({ ...o, ...(o.handR ? { spaceR: 0 } : {}), ...(o.handL ? { spaceL: 0 } : {}) });
+const strike = (W, X, F = null) => [[0, {}], ['S', W], ['M', rootHands(X)], ['A', rootHands(X)], ...(F ? [['R', rootHands(F)]] : []), [1, {}]];
 
 export const ATTACK_CLIPS = {
   jab_r: strike({ handR: [-0.05, 0.05, 0.22], chest: [0.06, -0.2, 0] },
-    { handR: [-0.12, 0.1, 1.0], chest: [0.08, 0.42, 0], spine: [0.12, 0.1, 0], footR: [0.1, 0, -0.26], elbowR: [0.6, -0.4, 0] }),
+    { handR: [-0.3, 0.08, 1.3], chest: [0.08, 0.42, 0], spine: [0.12, 0.1, 0], footR: [0.1, 0, -0.26], elbowR: [0.6, -0.4, 0] }),
   hook_l: strike({ handL: [0.35, 0.05, 0.25], chest: [0.05, 0.3, 0] },
-    { handL: [-0.5, 0.12, 0.72], elbowL: [0.3, 0.8, -0.3], chest: [0.08, -0.6, 0], spine: [0.1, -0.2, 0] }),
+    { handL: [-0.45, 0.1, 1.15], elbowL: [0.3, 0.8, -0.3], chest: [0.08, -0.6, 0], spine: [0.1, -0.2, 0] }),
   uppercut_r: strike({ handR: [0.0, -0.45, 0.3], hipsOff: [0, -0.17, 0], chest: [0.28, 0.15, 0] },
-    { handR: [-0.14, 0.7, 0.5], chest: [-0.18, 0.38, 0], spine: [-0.05, 0.1, 0], hipsOff: [0, 0.0, 0], head: [-0.25, 0, 0] }),
+    { handR: [-0.2, 0.5, 0.85], chest: [-0.15, 0.38, 0], spine: [-0.05, 0.1, 0], hipsOff: [0, 0.0, 0], head: [-0.2, 0, 0] }),
   kick_front: strike({ footR: [0.05, 0.38, 0.08], kneeR: [0, 0.4, 1], hipsRot: [0.12, 0, 0] },
     { footR: [0.05, 0.6, 0.92], hipsRot: [-0.22, 0, 0], spine: [-0.06, 0, 0], handL: [0.3, -0.1, 0.35], handR: [0.4, -0.2, 0.1] }),
   roundhouse: strike({ footR: [0.28, 0.35, -0.12], hipsRot: [0, 0.5, 0], chest: [0, -0.3, 0] },
     { footR: [-0.4, 0.9, 0.55], kneeR: [0, 1, 0.3], hipsRot: [-0.12, -1.0, -0.35], chest: [0.1, 0.65, 0.2], spine: [-0.12, 0.1, 0.1], handL: [0.6, 0.1, 0], handR: [0.5, -0.1, -0.2] }),
   haymaker: strike({ handR: [0.55, 0.25, -0.35], chest: [0.0, -0.65, 0], hipsRot: [0, -0.2, 0] },
-    { handR: [-0.32, 0.12, 0.95], chest: [0.16, 0.75, 0], spine: [0.16, 0.22, 0], footR: [0.1, 0, -0.32] }),
+    { handR: [-0.35, 0.05, 1.35], chest: [0.16, 0.75, 0], spine: [0.16, 0.22, 0], footR: [0.1, 0, -0.32] }),
   hook_r: null, jab_l: null,
   clothesline: [[0, {}], ['S', { handR: [1.0, 0.12, 0.05], spaceR: 1 }], ['A', { handR: [1.0, 0.15, 0.3], chest: [0, 0.35, 0] }], [1, { handR: [0.9, 0.1, 0.3] }]],
   charge: [[0, {}], ['S', { chest: [0.5, 0, 0], spine: [0.35, 0, 0], head: [-0.35, 0, 0], handL: [0.25, -0.3, 0.55], handR: [0.25, -0.3, 0.55], hipsOff: [0, -0.1, 0] }],
@@ -71,16 +74,16 @@ export const ATTACK_CLIPS = {
     ['M', { tilt: [1.38, 0], drop: 0.88, handR: [-0.1, -0.2, 0.5], handL: [0.5, -0.2, 0.2] }], ['R', { tilt: [1.2, 0], drop: 0.8, handR: [0, -0.5, 0.4] }],
     [1, { hipsOff: [0, -0.3, 0], tilt: [0.3, 0] }]],
   item_swing: strike({ handR: [0.45, 0.65, -0.3], chest: [-0.1, -0.55, 0], elbowR: [1, 0.5, 0] },
-    { handR: [-0.35, 0.05, 0.95], chest: [0.22, 0.65, 0], spine: [0.1, 0.2, 0] }),
+    { handR: [-0.35, 0.05, 1.2], chest: [0.22, 0.65, 0], spine: [0.1, 0.2, 0] }),
   item_overhead: strike({ handR: [-0.3, 1.05, 0.12], chest: [-0.28, 0, 0], spine: [-0.12, 0, 0], grip: 1, elbowR: [0.5, 0.3, -0.5] },
     { handR: [-0.3, -0.25, 0.85], chest: [0.5, 0, 0], spine: [0.22, 0, 0], hipsOff: [0, -0.14, 0], grip: 1 }),
   item_throw: strike({ handR: [0.3, 0.85, -0.45], chest: [-0.12, -0.45, 0] }, { handR: [-0.2, 0.35, 0.95], chest: [0.16, 0.45, 0] }),
   double_smash: strike({ handL: [0.45, 0.4, -0.25], handR: [0.45, 0.4, -0.25], chest: [-0.18, 0, 0] },
-    { handL: [-0.28, 0.08, 0.92], handR: [-0.28, 0.08, 0.92], chest: [0.28, 0, 0], spine: [0.1, 0, 0] }),
+    { handL: [-0.28, 0.08, 1.2], handR: [-0.28, 0.08, 1.2], chest: [0.28, 0, 0], spine: [0.1, 0, 0] }),
   overhead_smash: strike({ handL: [-0.15, 1.05, 0.05], handR: [-0.15, 1.05, 0.05], chest: [-0.28, 0, 0], elbowL: [0.4, 0.4, -0.6], elbowR: [0.4, 0.4, -0.6] },
     { handL: [-0.22, -0.32, 0.82], handR: [-0.22, -0.32, 0.82], chest: [0.55, 0, 0], spine: [0.22, 0, 0], hipsOff: [0, -0.16, 0] }),
   food_slap: strike({ handL: [0.9, 0.25, -0.3], chest: [0, 0.5, 0], elbowL: [0.6, 0.3, -0.6] },
-    { handL: [-0.38, 0.02, 0.88], chest: [0.1, -0.65, 0], spine: [0.06, -0.22, 0] }),
+    { handL: [-0.38, 0.02, 1.15], chest: [0.1, -0.65, 0], spine: [0.06, -0.22, 0] }),
   food_smash: strike({ handL: [0.0, 1.05, 0.0], chest: [-0.22, 0.2, 0], handR: [0.5, 0.2, 0.2] },
     { handL: [-0.18, -0.38, 0.8], chest: [0.48, -0.2, 0], hipsOff: [0, -0.16, 0], spine: [0.2, 0, 0] }),
   headbutt: [[0, { handL: [-0.3, 0.15, 0.55], handR: [-0.3, 0.1, 0.55] }], ['S', { handL: [-0.3, 0.15, 0.55], handR: [-0.3, 0.1, 0.55], chest: [-0.2, 0, 0], head: [-0.3, 0, 0] }],
@@ -92,9 +95,9 @@ ATTACK_CLIPS.hook_r = ATTACK_CLIPS.hook_l.map(([t, o]) => [t, mirror(o)]);
 ATTACK_CLIPS.jab_l = ATTACK_CLIPS.jab_r.map(([t, o]) => [t, mirror(o)]);
 ATTACK_CLIPS.item_throw_anim = ATTACK_CLIPS.item_throw;
 
-const HOLD_HANDS = { handL: [-0.32, 0.18, 0.52], handR: [-0.32, 0.12, 0.52], chest: [0.14, 0, 0], elbowL: [0.9, 0.2, -0.3], elbowR: [0.9, 0.2, -0.3] };
+const HOLD_HANDS = { handL: [-0.1, 0.16, 0.62], handR: [-0.1, 0.1, 0.62], chest: [0.14, 0, 0], elbowL: [0.9, -0.2, -0.3], elbowR: [0.9, -0.2, -0.3] };
 export const HOLD = HOLD_HANDS;
-export const HELD = { handL: [-0.3, 0.1, 0.45], handR: [-0.3, 0.05, 0.45], chest: [0.2, 0, 0], head: [0.1, 0, 0], hipsOff: [0, -0.05, 0] };
+export const HELD = { handL: [-0.05, 0.05, 0.5], handR: [-0.05, 0.0, 0.5], chest: [0.2, 0, 0], head: [0.1, 0, 0], hipsOff: [0, -0.05, 0] };
 
 // grapple moves (grabber), keyed in seconds of the move
 export const GRAPPLE_CLIPS = {

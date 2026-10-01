@@ -111,6 +111,8 @@ export class FighterController {
 
     if (w.match.frozen(f)) { f.vx *= 0.8; f.vz *= 0.8; integrate(f, dt, w.arena); return; }
 
+    // input buffer: a press during recovery/hitstun is kept for 0.25 s
+    if (pressed) { f.buf = (f.buf || 0) | pressed; f.bufT = 0.25; } else if (f.bufT > 0) { f.bufT -= dt; if (f.bufT <= 0) f.buf = 0; }
     // mash counters (escape holds / get up faster / kick out)
     const mashBits = BTN.PUNCH | BTN.KICK | BTN.GRAB | BTN.JUMP | BTN.INTERACT;
     if (pressed & mashBits) f.mash++;
@@ -202,7 +204,9 @@ export class FighterController {
 
   // ── free (actionable) state ──
   free(f, dt, tgt) {
-    const w = this.world, inp = f.input, p = inp.pressed, h = inp.held;
+    const w = this.world, inp = f.input, h = inp.held;
+    const p = inp.pressed | (f.bufT > 0 ? f.buf : 0);
+    f.buf = 0; f.bufT = 0;
     // block
     if (h & BTN.BLOCK) { if (f.state !== S.BLOCK) setState(f, S.BLOCK); }
     else if (f.state === S.BLOCK) setState(f, S.IDLE);

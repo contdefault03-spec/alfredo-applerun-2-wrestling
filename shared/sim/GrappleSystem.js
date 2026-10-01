@@ -142,7 +142,8 @@ export class GrappleSystem {
   heldUpdate(v, dt) {
     const w = this.world;
     const g = w.byId(v.heldBy);
-    if (!g || g.state !== S.HOLD) { v.heldBy = null; setState(v, S.IDLE); return; }
+    if (!g || (g.state !== S.HOLD && g.state !== S.THROWING)) { v.heldBy = null; setState(v, S.IDLE); return; }
+    if (g.state === S.THROWING) return; // being thrown – no escaping now
     // reversal
     if (v.input.pressed & BTN.BLOCK && v.stateTime < REVERSAL_WINDOW && g.c.grabStrength < v.c.grabStrength * 1.8 && !v.reversalUsed) {
       v.reversalUsed = true;

@@ -18,9 +18,11 @@ export class Animator {
   constructor(solver, character) {
     this.solver = solver;
     this.c = character;
+    // character-specific stance tweaks (e.g. Ajan carries his food low)
+    this.G = { ...GUARD, ...(character.poses?.guard || {}) };
     this.cur = newPose(); this.vel = new Float32Array(P.SIZE); this.tgt = newPose();
     this.tmp = newPose();
-    applyOverrides(this.cur, GUARD);
+    applyOverrides(this.cur, this.G);
     this.phase = 0; this.time = Math.random() * 10;
     this.omega = 30;
     this.lastState = null;
@@ -140,20 +142,20 @@ export class Animator {
     }
     switch (st) {
       case S.IDLE: case S.MOVE: {
-        this.locomotion(t, v, dt, v.relaxed ? RELAXED : GUARD);
+        this.locomotion(t, v, dt, v.relaxed ? RELAXED : this.G);
         this.breathe(t);
         handsForItem(t);
         return 26;
       }
       case S.BLOCK: {
-        this.locomotion(t, v, dt, GUARD);
+        this.locomotion(t, v, dt, this.G);
         set(t, 'handL', [-0.14, 0.3, 0.32]); set(t, 'handR', [-0.18, 0.27, 0.3]);
         set(t, 'elbowL', [0.2, -1, 0.4]); set(t, 'elbowR', [0.2, -1, 0.4]);
         add(t, 'head', [0.22, 0, 0]); add(t, 'chest', [0.1, 0, 0]); add(t, 'hipsOff', [0, -0.05, 0]);
         return 38;
       }
       case S.JUMP: {
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         const up = (v.vy ?? 0) > 0;
         set(t, 'footL', [0.07, up ? 0.35 : 0.15, 0.1]); set(t, 'footR', [0.1, up ? 0.25 : 0.1, -0.1]);
         set(t, 'handL', [0.2, 0.35, 0.3]); set(t, 'handR', [0.2, 0.35, 0.3]);
@@ -161,7 +163,7 @@ export class Animator {
       }
       case S.DODGE: {
         const u = clamp01(time / (this.c.dodgeDuration || 0.34));
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         if (v.sub === 1) { // roll
           set(t, 'tilt', [u * TWO_PI, 0]); set(t, 'drop', Math.sin(u * Math.PI) * 0.75);
           set(t, 'hipsOff', [0, -0.3, 0]); set(t, 'spine', [0.6, 0, 0]);
@@ -175,30 +177,30 @@ export class Animator {
       case S.ATTACK: {
         const m = ATTACKS[v.move];
         const clip = m && ATTACK_CLIPS[m.anim];
-        if (!clip) { applyOverrides(t, GUARD); return 30; }
+        if (!clip) { applyOverrides(t, this.G); return 30; }
         const an = this.attackAnchors(v, m);
         const u = clamp01(time / (v.stateDur || 0.5));
-        sampleClip(t, clip, GUARD, u, an);
+        sampleClip(t, clip, this.G, u, an);
         if (holdingItem && (m.anim === 'item_swing' || m.anim === 'item_overhead') && holdingItem.twoHanded) set(t, 'grip', 1);
         else if (holdingItem && m.anim !== 'item_throw') handsForItem(t);
         return m.type === 'aerial' || m.anim === 'dropkick' ? 30 : 48;
       }
       case S.GRAB: {
         const u = clamp01(time / (v.stateDur || 0.42));
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         const e = Math.sin(Math.min(1, u * 1.6) * Math.PI * 0.5);
         set(t, 'handL', [-0.2, 0.05, 0.5 + 0.45 * e]); set(t, 'handR', [-0.2, 0.05, 0.5 + 0.45 * e]);
         add(t, 'chest', [0.18 * e, 0, 0]);
         return 45;
       }
       case S.HOLD: {
-        applyOverrides(t, GUARD, HOLD);
+        applyOverrides(t, this.G, HOLD);
         if (v.sub === 1) { add(t, 'chest', [0.35, 0, 0]); add(t, 'head', [0.35, 0, 0]); }
         add(t, 'chest', [0, Math.sin(this.time * 7) * 0.05, 0]);
         return 30;
       }
       case S.HELD: {
-        applyOverrides(t, GUARD, HELD);
+        applyOverrides(t, this.G, HELD);
         add(t, 'chest', [0, Math.sin(this.time * 9) * 0.08, Math.sin(this.time * 6) * 0.05]);
         return 30;
       }
@@ -206,11 +208,11 @@ export class Animator {
         const m = ATTACKS[v.move];
         const clip = GRAPPLE_CLIPS[m?.anim] || GRAPPLE_CLIPS.body_slam;
         const secs = clamp01(time / (v.stateDur || 1)) * (m?.duration || 1.25);
-        sampleClip(t, clip, GUARD, secs, {});
+        sampleClip(t, clip, this.G, secs, {});
         return 26;
       }
       case S.GRAPPLE_VICTIM: {
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         set(t, 'tilt', [v.tilt ?? -1.2, 0]);
         set(t, 'handL', [0.7, 0.2, 0.1]); set(t, 'handR', [0.7, 0.25, -0.1]);
         set(t, 'footL', [0.1, 0.15, 0.1]); set(t, 'footR', [0.12, 0.05, -0.1]);
@@ -220,17 +222,17 @@ export class Animator {
       case S.THROWING: {
         const m = ATTACKS[v.move];
         const clip = THROW_CLIPS[m?.anim] || THROW_CLIPS.throw;
-        sampleClip(t, clip, GUARD, time, {});
+        sampleClip(t, clip, this.G, time, {});
         return 35;
       }
       case S.WHIPPED: case S.REBOUND: {
-        this.locomotion(t, { ...v, vx: Math.sin(v.yaw) * 6, vz: Math.cos(v.yaw) * 6 }, dt, GUARD);
+        this.locomotion(t, { ...v, vx: Math.sin(v.yaw) * 6, vz: Math.cos(v.yaw) * 6 }, dt, this.G);
         set(t, 'handL', [0.5, 0.2, 0.3]); set(t, 'handR', [0.6, 0.25, 0.2]);
         if (st === S.REBOUND) { set(t, 'spine', [-0.35, 0, 0]); set(t, 'handL', [0.8, 0.1, -0.5]); set(t, 'handR', [0.8, 0.1, -0.5]); }
         return 30;
       }
       case S.HITSTUN: case S.PARRIED: {
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         const dur = v.stateDur || 0.3, u = clamp01(time / dur);
         const e = Math.sin(Math.min(1, u * 1.4) * Math.PI);
         const big = v.sub >= 1 || st === S.PARRIED;
@@ -245,14 +247,14 @@ export class Animator {
         return 22;
       }
       case S.CORNER_STUN: {
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         set(t, 'hipsOff', [0, -0.22, -0.12]); set(t, 'spine', [-0.1, 0, 0]); set(t, 'head', [0.45, 0, 0.2]);
         set(t, 'handL', [0.95, 0.12, -0.3]); set(t, 'handR', [0.95, 0.1, -0.3]); set(t, 'spaceL', 0); set(t, 'spaceR', 0);
         set(t, 'footL', [0.15, 0, 0.25]); set(t, 'footR', [0.15, 0, 0.2]);
         return 18;
       }
       case S.AIRBORNE: {
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         const fd = v.sub === 1;
         set(t, 'tilt', [(fd ? 1 : -1) * Math.min(1.45, time * 4.2), 0]);
         set(t, 'drop', Math.min(0.6, time * 1.2));
@@ -282,13 +284,13 @@ export class Animator {
         const u = clamp01(time / (v.stateDur || 0.75));
         const fd = v.sub === 1;
         this.lying(t, fd);
-        applyOverrides(this.tmp, GUARD, { hipsOff: [0, -0.35, 0], spine: [0.45, 0, 0], handL: [0.2, -0.8, 0.5], handR: [0.2, -0.8, 0.5], footR: [0.1, 0, 0.3] });
+        applyOverrides(this.tmp, this.G, { hipsOff: [0, -0.35, 0], spine: [0.45, 0, 0], handL: [0.2, -0.8, 0.5], handR: [0.2, -0.8, 0.5], footR: [0.1, 0, 0.3] });
         const k = sm(u * 1.15);
         for (let i = 0; i < P.SIZE; i++) t[i] += (this.tmp[i] - t[i]) * k;
         return 22;
       }
       case S.CLIMB: {
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         const kind = v.sub;
         const w = Math.sin(time * 9);
         if (kind === 1) { // roll out under the ropes
@@ -301,7 +303,7 @@ export class Animator {
         return 25;
       }
       case S.PERCH: {
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         set(t, 'hipsOff', [0, -0.3, 0]); set(t, 'spine', [0.3, 0, 0]);
         set(t, 'handL', [0.95, 0.35, 0.05]); set(t, 'handR', [0.95, 0.35, 0.05]); set(t, 'spaceL', 1); set(t, 'spaceR', 1);
         set(t, 'footL', [0.12, 0, 0]); set(t, 'footR', [0.12, 0, 0]);
@@ -309,7 +311,7 @@ export class Animator {
         return 20;
       }
       case S.CAGE_CLIMB: {
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         const w = Math.sin((v.y || 0) * 5);
         set(t, 'handL', [0.2, 0.85 + w * 0.12, 0.45]); set(t, 'handR', [0.2, 0.85 - w * 0.12, 0.45]);
         set(t, 'footL', [0.1, 0.25 + w * 0.15, 0.3]); set(t, 'footR', [0.1, 0.25 - w * 0.15, 0.3]);
@@ -317,7 +319,7 @@ export class Animator {
         return 25;
       }
       case S.DIVE: {
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         if (v.sub === 0) {
           const u = clamp01(time / 0.75);
           set(t, 'tilt', [Math.min(1.45, u * 2.4), 0]);
@@ -352,7 +354,7 @@ export class Animator {
         return 18;
       }
       default:
-        applyOverrides(t, GUARD);
+        applyOverrides(t, this.G);
         return 25;
     }
   }
@@ -360,7 +362,7 @@ export class Animator {
   special(t, v) {
     const ab = ABILITIES[v.move];
     const time = v.stateTime || 0;
-    applyOverrides(t, GUARD);
+    applyOverrides(t, this.G);
     if (!ab) return 30;
     switch (ab.kind) {
       case 'leap_crush': {

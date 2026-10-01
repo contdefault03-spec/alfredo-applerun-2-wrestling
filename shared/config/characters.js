@@ -87,6 +87,8 @@ export const CHARACTERS = {
     hands: { left: 'food', foodStrikes: true, sound: 'food' },
     moveset: { punch: 'ajan_food_slap', punch2: 'ajan_backhand', punch3: 'ajan_food_smash', kick: 'ajan_stomp_kick', heavy: 'ajan_double_axe', running: 'ajan_charge' },
     voicePitch: 0.5, color: '#9a6a3a',
+    // animation stance overrides (body-relative units, see client/src/anim/PoseSolver.js)
+    poses: { guard: { handL: [0.3, -0.5, 0.5], elbowL: [0.6, -1, -0.2], handR: [-0.05, -0.05, 0.5] } },
     rig: {
       // Ajan is asymmetric: the food bowl sits in his left hand (+X).
       left: { shoulder: [0.17, 0.605, 0.02], elbow: [0.29, 0.56, 0.03], wrist: [0.37, 0.545, 0.03], handTip: [0.43, 0.535, 0.04] },

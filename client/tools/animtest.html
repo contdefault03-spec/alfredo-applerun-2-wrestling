@@ -1,0 +1,56 @@
+<!doctype html><html><body style="margin:0;background:#222">
+<script type="module">
+// Animation QA gallery: renders FighterView (AutoRig + Animator) in many sim states.
+import * as THREE from 'three';
+import { AssetManager } from '/src/core/AssetManager.js';
+import { FighterView } from '/src/render/FighterView.js';
+const q = new URLSearchParams(location.search);
+const id = q.get('char') || 'masked';
+const T = +(q.get('t') || 220);
+const STATES = (q.get('states') || 'idle,move:walk,move:run,block,attack:jab@0.45,attack:hook@0.5,attack:uppercut@0.5,attack:kick@0.5,attack:roundhouse@0.55,attack:heavy@0.6,hitstun@0.3,airborne@0.25,down,getup@0.5,hold,held,special@0.2,special@0.9,taunt@0.5,perch,celebrate@0.3').split(',');
+const assets = new AssetManager();
+await assets.loadCharacter(id);
+const cols = Math.min(7, STATES.length), rows = Math.ceil(STATES.length / cols);
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(T * cols, T * rows); r.setScissorTest(true); document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x4a4f5a);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x334, 2)); const d = new THREE.DirectionalLight(0xffffff, 2.5); d.position.set(2, 4, 3); scene.add(d);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x777777 })); scene.add(floor);
+const views = [];
+const { ATTACKS } = await import('@shared/config/attacks.js');
+const { getCharacter } = await import('@shared/config/characters.js');
+const c = getCharacter(id);
+STATES.forEach((spec, i) => {
+  const v = new FighterView(assets, id);
+  const [st0, frac] = spec.split('@'); const [state, variant] = st0.split(':');
+  const x = (i % cols) * 6, z = Math.floor(i / cols) * 6;
+  const s = { x, y: 0, z, yaw: 0.6, vx: 0, vz: 0, vy: 0, state, stateTime: 0, stateDur: 1, move: null, sub: 0, onGround: true, c };
+  if (state === 'move') { const sp = variant === 'run' ? c.runSpeed : c.walkSpeed; s.vx = Math.sin(0.6) * sp; s.vz = Math.cos(0.6) * sp; }
+  if (state === 'attack') { const moveId = c.moveset[variant === 'jab' ? 'punch' : variant] && variant !== 'uppercut' && variant !== 'hook' && variant !== 'roundhouse' ? c.moveset[variant] : variant; const m = ATTACKS[moveId] || ATTACKS[variant]; s.move = m.id; s.stateDur = (m.startup + m.recovery) / c.attackSpeed + m.active; s.stateTime = s.stateDur * +frac; }
+  else if (frac) s.stateTime = +frac * (state === 'getup' ? 0.75 : 1), s.stateDur = state === 'hitstun' ? 0.6 : 0.75;
+  if (state === 'special') { s.move = c.special; s.sub = +frac > 0.5 ? 2 : 0; s.stateTime = +frac; }
+  if (state === 'airborne') s.sub = 0;
+  scene.add(v.root);
+  views.push({ v, s, x, z });
+});
+// settle springs
+for (let k = 0; k < 90; k++) for (const o of views) { o.s.stateTime += 0; o.v.update(1 / 60, o.s); }
+const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+views.forEach((o, i) => {
+  const h = c.height;
+  if (q.get('view') === 'side') { const a = 0.6 + Math.PI / 2; cam.position.set(o.x + Math.sin(a) * 3.4 * h, h * 0.7, o.z + Math.cos(a) * 3.4 * h); } else cam.position.set(o.x + 2.2 * h, h * 0.75, o.z + 2.6 * h);
+  cam.lookAt(o.x, h * 0.45, o.z);
+  const cx = (i % cols) * T, cy = (rows - 1 - Math.floor(i / cols)) * T;
+  r.setViewport(cx, cy, T, T); r.setScissor(cx, cy, T, T); r.render(scene, cam);
+});
+// labels
+const lab = document.createElement('div'); lab.style.cssText = `position:absolute;left:0;top:0;width:${T * cols}px;font:12px sans-serif;color:#fff`;
+lab.innerHTML = STATES.map((s, i) => `<span style="position:absolute;left:${(i % cols) * T + 4}px;top:${Math.floor(i / cols) * T + 2}px;background:#000a;padding:1px 4px">${s}</span>`).join('');
+document.body.appendChild(lab);
+window.dbg = views.map((o, i) => { const sv = o.v.solver; const J = sv.J; const sh = sv.wp.upperArm_R, h = sv.handPos.R; return STATES[i] + ' reachR=' + h.distanceTo(sh).toFixed(3) + ' arm=' + sv.armLen.R.toFixed(3) + ' hand=(' + [h.x,h.y,h.z].map(v=>v.toFixed(2)) + ') sh=(' + [sh.x,sh.y,sh.z].map(v=>v.toFixed(2)) + ') spaceR=' + o.v.anim.cur[52].toFixed(2) + ' tgt=' + Array.from(o.v.anim.tgt.slice(21,24)).map(v=>v.toFixed(2)); });
+console.log(JSON.stringify(window.dbg));
+window.done = true;
+</script></body></html>
+<script type="module">
+const wait = () => new Promise(r => { const f = () => window.done ? r() : setTimeout(f, 50); f(); });
+await wait();
+</script>

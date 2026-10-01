@@ -208,6 +208,15 @@ export function autoRig(srcMesh, rigCfg) {
         else { idx[2] = k; val[2] = s; }
       }
     }
+    // held props (Max's weights, Ajan's food bowl): everything past the wrist moves rigidly with the hand
+    const top = segs[idx[0]][0];
+    if (top.startsWith('hand_') || top.startsWith('lowerArm_')) {
+      const sd = top.slice(-1);
+      const S0 = J['upperArm_' + sd], W0 = J['hand_' + sd];
+      const dx = W0.x - S0.x, dy = W0.y - S0.y, dz = W0.z - S0.z;
+      const t = ((p.x - S0.x) * dx + (p.y - S0.y) * dy + (p.z - S0.z) * dz) / (dx * dx + dy * dy + dz * dz);
+      if (t > 1.02) { idx[0] = segs.findIndex((sg) => sg[0] === 'hand_' + sd); val[0] = 1; val[1] = val[2] = 0; }
+    }
     const sum = val[0] + val[1] + val[2] || 1;
     for (let j = 0; j < 3; j++) {
       skinIndex[i * 4 + j] = boneIndex[segs[idx[j]][0]];

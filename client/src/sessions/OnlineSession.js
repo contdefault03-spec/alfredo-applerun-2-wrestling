@@ -25,7 +25,7 @@ export class OnlineSession {
     this.events = []; this.pendingEvents = [];
     this.serverTime = 0; this.clockBase = null;
     this.seq = 0; this.inputs = []; this.acc = 0;
-    this.pred = null; this.corr = { x: 0, y: 0, z: 0 };
+    this.pred = null; this.renderPos = null; this.lastView = performance.now();
     this.items = []; this.referee = { x: 0, y: 1.2, z: 0, yaw: 0, state: 'watch', count: 0 };
     this.match = { phase: 'intro', timeLeft: start.rules.timeLimit, winners: [] };
     this.off = [net.on('snap', (m) => this.onSnap(m)), net.on('end', (m) => { this.endInfo = m; })];
@@ -47,16 +47,11 @@ export class OnlineSession {
   reconcile(server, ack) {
     if (!server) return;
     const me = this.byId.get(this.localId);
-    const before = this.pred ? { x: this.pred.x, y: this.pred.y, z: this.pred.z } : null;
     const p = Object.assign(this.pred || { c: me.c, input: {} }, server);
     p.c = me.c;
     this.inputs = this.inputs.filter((i) => i.seq > ack);
     if (FREE.has(p.state)) for (const i of this.inputs) this.predictStep(p, i.input);
     this.pred = p;
-    if (before) {
-      const dx = before.x - p.x, dy = before.y - p.y, dz = before.z - p.z;
-      if (Math.hypot(dx, dz) < 2.5) { this.corr.x += dx; this.corr.y += dy; this.corr.z += dz; } else this.corr = { x: 0, y: 0, z: 0 };
-    }
   }
 
   predictStep(p, input) {
@@ -81,8 +76,6 @@ export class OnlineSession {
       if (this.pred) this.predictStep(this.pred, inp);
     }
     if (pressed) input.pressed = pressed; // not sent yet – keep for next tick
-    const k = Math.exp(-dt * 10);
-    this.corr.x *= k; this.corr.y *= k; this.corr.z *= k;
     // release events whose time has come
     const rt = this.renderTime();
     const due = [], keep = [];
@@ -118,7 +111,16 @@ export class OnlineSession {
         const ls = latest.f.get(f.id);
         Object.assign(f, ls);
         f.stateTime = ls.stateTime + Math.max(0, performance.now() / 1000 - latest.recv);
-        if (this.pred) { f.x = this.pred.x + this.corr.x; f.y = this.pred.y + this.corr.y; f.z = this.pred.z + this.corr.z; if (FREE.has(ls.state)) f.yaw = this.pred.yaw; f.vx = this.pred.vx; f.vz = this.pred.vz; }
+        if (this.pred) {
+          // render position eases toward the prediction (hides reconciliation snaps; time-based so it is frame-rate independent)
+          const now = performance.now(), dtv = Math.min(0.25, (now - this.lastView) / 1000); this.lastView = now;
+          const rp = this.renderPos || (this.renderPos = { x: this.pred.x, y: this.pred.y, z: this.pred.z });
+          const k = 1 - Math.exp(-dtv * 18);
+          if (Math.hypot(this.pred.x - rp.x, this.pred.z - rp.z) > 2.5) { rp.x = this.pred.x; rp.z = this.pred.z; }
+          rp.x += (this.pred.x - rp.x) * k; rp.y += (this.pred.y - rp.y) * k; rp.z += (this.pred.z - rp.z) * k;
+          f.x = rp.x; f.y = rp.y; f.z = rp.z;
+          if (FREE.has(ls.state)) f.yaw = this.pred.yaw; f.vx = this.pred.vx; f.vz = this.pred.vz;
+        }
       }
       const it = f.item != null ? (latest?.items.find((i) => i.id === f.item)) : null;
       f.itemType = it ? it.type : null;

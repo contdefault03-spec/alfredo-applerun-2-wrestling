@@ -1,0 +1,25 @@
+# Render Blueprint – https://render.com/docs/blueprint-spec
+# One Web Service runs the authoritative game server AND serves the built
+# client from the same origin (simplest + most reliable for WebSockets).
+services:
+  - type: web
+    name: ring-kings
+    runtime: node
+    plan: starter            # free works too, but free instances sleep when idle (first visit takes ~1 min)
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY      # optional – AI commentary (set in the dashboard, never commit it)
+        sync: false
+      - key: GEMINI_TTS          # optional – "1" enables AI voice commentary (extra API cost)
+        value: "0"
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: ALLOWED_ORIGINS     # "*" or a comma list, e.g. https://ring-kings-client.onrender.com
+        value: "*"

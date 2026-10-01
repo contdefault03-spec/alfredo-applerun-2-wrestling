@@ -123,7 +123,7 @@ export class UIManager {
     const state = { mode, slots: [] };
     const defaultSlots = (m) => {
       const others = CHARACTER_IDS.filter((c) => c !== me);
-      const pickC = (i) => others[(i * 3 + 1) % others.length];
+      const pickC = (i) => others[(i * 2 + 1) % others.length];
       if (m === 'tag') return [{ charId: pickC(0), team: 0, difficulty: s.difficulty }, { charId: pickC(1), team: 1, difficulty: s.difficulty }, { charId: pickC(2), team: 1, difficulty: s.difficulty }];
       if (m === 'ffa') return [0, 1, 2].map((i) => ({ charId: pickC(i), team: i + 1, difficulty: s.difficulty }));
       return [{ charId: pickC(0), team: 1, difficulty: s.difficulty }];

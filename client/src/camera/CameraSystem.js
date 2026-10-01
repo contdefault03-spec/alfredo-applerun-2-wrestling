@@ -36,8 +36,8 @@ export class CameraSystem {
       const C = ARENA.cage.half - 0.35;
       p.x = Math.max(-C, Math.min(C, p.x)); p.z = Math.max(-C, Math.min(C, p.z)); p.y = Math.min(ARENA.cage.height - 0.4, p.y);
     } else {
-      const lim = 21;
-      p.x = Math.max(-lim, Math.min(lim, p.x)); p.z = Math.max(-lim + 1, Math.min(lim + 6, p.z));
+      const lim = 12.5;
+      p.x = Math.max(-lim, Math.min(lim, p.x)); p.z = Math.max(-lim, Math.min(lim + 4, p.z));
       // above the stands' seating rake
       const ax = Math.abs(p.x) - S.innerX, az = -p.z - S.innerZ;
       const into = Math.max(ax, az, p.z > S.innerZ + 2.5 && Math.abs(p.x) > 9.5 ? p.z - (S.innerZ + 2.5) : -1);

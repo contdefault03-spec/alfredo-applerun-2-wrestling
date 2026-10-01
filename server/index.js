@@ -13,6 +13,13 @@ import { GeminiProvider } from './gemini.js';
 import { PROTOCOL_VERSION } from '../shared/net/protocol.js';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+// minimal .env support for local development (Render injects env vars directly)
+try {
+  for (const line of fs.readFileSync(path.join(ROOT, '.env'), 'utf8').split(/\r?\n/)) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
+    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+} catch { /* no .env */ }
 const DIST = path.resolve(ROOT, process.env.STATIC_DIR || 'dist');
 const PORT = Number(process.env.PORT || 3000);
 const ALLOWED = (process.env.ALLOWED_ORIGINS || '*').split(',').map((s) => s.trim()).filter(Boolean);
