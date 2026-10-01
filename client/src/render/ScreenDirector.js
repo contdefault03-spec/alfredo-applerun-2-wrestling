@@ -14,6 +14,7 @@ export class ScreenDirector {
 
   update(dt, time, view) {
     this.t += dt; this.acc += dt; this.flashT -= dt;
+    if (this.suspended) return; // the EntranceDirector owns the titantron during entrances
     if (this.acc < 1 / 8) return; // redraw at ~8 Hz
     this.acc = 0;
     const tron = this.arena.tron; if (!tron) return;

@@ -134,7 +134,7 @@ export class Room {
     if (m.teams === 'two') entrants.forEach((e, i) => { if (e.team > 1) e.team = i % 2; });
     const teams = new Set(entrants.map((e) => e.team));
     if (teams.size < 2) return 'Put at least two different teams in the match';
-    this.world = new World({ mode: this.mode, fighters: entrants.map(({ player, ...e }) => e) });
+    this.world = new World({ mode: this.mode, entrances: true, fighters: entrants.map(({ player, ...e }) => e) });
     entrants.forEach((e, i) => { if (e.player) { e.player.fighterId = this.world.fighters[i].id; e.player.lastSeq = 0; } });
     this.state = 'match';
     this.commentary = new CommentaryEngine({
