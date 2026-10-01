@@ -10,7 +10,7 @@ import { ItemSystem } from './ItemSystem.js';
 import { AbilitySystem } from './AbilitySystem.js';
 import { MatchSystem } from './MatchSystem.js';
 import { AISystem } from './AISystem.js';
-import { S, DT } from './constants.js';
+import { S, DT, HEAL_DELAY, HEAL_RATE } from './constants.js';
 
 export class World {
   /**
@@ -52,6 +52,18 @@ export class World {
     this.combat.update();
     this.items.update(dt);
     this.match.update(dt);
+    this.regen(dt);
+  }
+
+  /** Out-of-combat health regeneration (live phase only). */
+  regen(dt) {
+    if (this.match.phase !== 'live') return;
+    for (const f of this.fighters) {
+      if (f.hidden || f.eliminated || f.state === S.KO) continue;
+      if (f.hp >= f.maxHp) continue;
+      if (this.time - f.lastHitTime < HEAL_DELAY) continue;
+      f.hp = Math.min(f.maxHp, f.hp + f.maxHp * HEAL_RATE * dt);
+    }
   }
 
   /** Push overlapping standing bodies apart (mass-weighted). */

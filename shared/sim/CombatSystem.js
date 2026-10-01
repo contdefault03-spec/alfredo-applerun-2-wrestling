@@ -99,6 +99,7 @@ export class CombatSystem {
       if (!spec.guardBreak) {
         const chip = Math.round(spec.damage * 0.12);
         v.hp = Math.max(1, v.hp - chip);
+        v.lastHitTime = w.time;
         v.stamina -= spec.damage * 0.25;
         const push = (spec.knockback ?? 2) * 0.5 * Math.sqrt(100 / v.c.weight);
         v.vx += dirX * push; v.vz += dirZ * push;
@@ -181,6 +182,7 @@ export class CombatSystem {
     v.hp = Math.max(0, v.hp - dmg);
     const by = v.lastHitBy != null && this.world.time - v.lastHitTime < 4 ? this.world.byId(v.lastHitBy) : null;
     if (by) { by.stats.damage += dmg; by.meter = Math.min(100, by.meter + dmg * 0.06); }
+    v.lastHitTime = this.world.time; // any damage resets out-of-combat regen
     this.world.emit('env_damage', { fighter: v.id, damage: dmg, kind });
     if (v.hp <= 0) this.knockOut(v, by);
   }

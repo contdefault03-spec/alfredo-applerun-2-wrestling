@@ -201,6 +201,33 @@ export class ArenaView {
     const bm = add(this.group, mergeGeometries(segs), padMat); bm.name = 'barricades';
     add(this.group, mergeGeometries(railGeos), rail);
     this.barricadeMeshes = [bm];
+    this.buildAds();
+  }
+
+  // ── ringside advertising hoardings on the barricades (face the ring) ──
+  buildAds() {
+    const B = ARENA.barricade;
+    const base = ((typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/').replace(/\/$/, '');
+    const loader = new THREE.TextureLoader();
+    const mats = ['assets/ads/add1.png', 'assets/ads/add2.png'].map((p) => {
+      const tex = loader.load(base + '/' + p);
+      tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+      return new THREE.MeshBasicMaterial({ map: tex, toneMapped: false });
+    });
+    const W = 2.6, H = 0.8, y = 0.55, inset = 0.06;
+    const geo = new THREE.PlaneGeometry(W, H);
+    let n = 0;
+    const banner = (x, z, rotY) => {
+      const m = add(this.group, geo, mats[n++ % mats.length], { cast: false, receive: false, pos: [x, y, z] });
+      m.rotation.y = rotY;
+    };
+    // back side (z = -halfZ), faces +Z toward the ring
+    for (const x of [-4.2, 0, 4.2]) banner(x, -B.halfZ + inset, 0);
+    // left / right sides, face inward
+    for (const z of [-3, 1.5]) banner(-B.halfX + inset, z, Math.PI / 2);
+    for (const z of [-3, 1.5]) banner(B.halfX - inset, z, -Math.PI / 2);
+    // entrance side (z = +halfZ) either side of the walkway gap, face -Z
+    for (const x of [-5.2, 5.2]) banner(x, B.halfZ - inset, Math.PI);
   }
 
   // ── commentary desk ──

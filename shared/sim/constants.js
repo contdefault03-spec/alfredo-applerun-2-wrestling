@@ -35,4 +35,10 @@ export const TICK_RATE = 60;
 export const DT = 1 / TICK_RATE;
 export const SNAPSHOT_RATE = 20;
 
+// Out-of-combat health regeneration: after taking no damage for HEAL_DELAY
+// seconds, a hurt wrestler slowly recovers HEAL_RATE of their max HP per second
+// (until they are hit again). Live phase only.
+export const HEAL_DELAY = 10;     // seconds since the last damage taken
+export const HEAL_RATE = 0.025;   // fraction of max HP regained per second (~slow)
+
 export const ZONE = { RING: 'ring', FLOOR: 'floor', APRON: 'apron' };
