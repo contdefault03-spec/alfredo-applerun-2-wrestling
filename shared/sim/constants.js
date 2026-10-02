@@ -51,7 +51,7 @@ export const RING_GRID = 3;
 export const RING_BREAK_HITS = 3;      // accumulated impacts to break (high-drop path)
 export const RING_BREAK_CHANCE = 0.05; // 5% chance a crush / special slam breaks the ring
 export const HEAVY_SLAM_WEIGHT = 180;  // kg; only slams from this heavy count
-export const FALL_DEPTH = 1.7;         // how far below the canvas a hole drops to
+export const FALL_DEPTH = 0.8;         // drop onto the exposed subfloor (still visible through the hole)
 export const FALL_RECOVER = 2.4;       // seconds down in the hole before climbing out
 export const FALL_DAMAGE = 70;         // damage from crashing through the ring
 

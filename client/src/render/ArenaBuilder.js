@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ARENA } from '@shared/config/arena.js';
 import { RING_GRID } from '@shared/sim/constants.js';
-import { CELL, cellCenter, levelFromHits } from '@shared/sim/RingDestruction.js';
+import { CELL, EXTENT, cellCenter, levelFromHits } from '@shared/sim/RingDestruction.js';
 import * as TX from './Textures.js';
 
 const R = ARENA.ring;
@@ -88,8 +88,21 @@ export class ArenaView {
     const apronTex = TX.apronTexture();
     const skirt = std({ map: apronTex, roughness: 0.8 });
     const canvasMat = std({ map: TX.ringCanvasTexture(), roughness: 0.88, metalness: 0 });
-    const plat = new THREE.BoxGeometry(A * 2, H, A * 2);
-    add(g, plat, [skirt, skirt, canvasMat, skirt, skirt, skirt], { pos: [0, H / 2, 0] });
+    // Recessed platform: the solid body stops SUB below the canvas, leaving an
+    // under-ring space. The canvas surface is a grid of tiles on top; break a tile
+    // and there's a real hole down to the dark subfloor (a fallen wrestler is visible).
+    const SUB = 0.8;
+    const subMat = std({ color: 0x241913, roughness: 1 }); // dark wooden subfloor seen through holes
+    const plat = new THREE.BoxGeometry(A * 2, H - SUB, A * 2);
+    add(g, plat, [skirt, skirt, subMat, skirt, skirt, skirt], { pos: [0, (H - SUB) / 2, 0] });
+    // the 9 destructible canvas tiles over the playing area (indexed by destruction cell)
+    this._surfaceTiles = [];
+    const tileGeo = new THREE.BoxGeometry(CELL, 0.08, CELL);
+    for (let k = 0; k < 9; k++) { const c = cellCenter(k); this._surfaceTiles[k] = add(g, tileGeo, canvasMat, { pos: [c.x, H - 0.04, c.z] }); }
+    // solid canvas border frame from the playing area out to the apron edge (never breaks)
+    const bw = A - EXTENT;
+    for (const [ox, oz, w, d] of [[0, (A + EXTENT) / 2, A * 2, bw], [0, -(A + EXTENT) / 2, A * 2, bw], [(A + EXTENT) / 2, 0, bw, EXTENT * 2], [-(A + EXTENT) / 2, 0, bw, EXTENT * 2]])
+      add(g, new THREE.BoxGeometry(w, 0.08, d), canvasMat, { pos: [ox, H - 0.04, oz] });
     // apron edge trim
     const trim = std({ color: 0x0a0c14, roughness: 0.4, metalness: 0.4 });
     for (const s of [-1, 1]) {
@@ -434,6 +447,7 @@ export class ArenaView {
       this._debris = {};
     }
     if (this.ringDmgCells) for (let k = 0; k < this.ringDmgCells.length; k++) { this.ringDmgCells[k].visible = false; this.ringDmgState[k] = 0; }
+    if (this._surfaceTiles) for (const t of this._surfaceTiles) t.visible = true;   // restore broken canvas tiles
     // restore snapped ropes
     if (this._ropeDebris) { for (const g of this._ropeDebris) { this.group.remove(g); g.traverse((o) => { if (o.isMesh) { o.geometry?.dispose?.(); o.material?.dispose?.(); } }); } this._ropeDebris = []; }
     for (const rope of this.ropes || []) { rope.mesh.visible = true; rope.broken = false; }
@@ -466,8 +480,9 @@ export class ArenaView {
       const m = this.ringDmgCells[k];
       if (lvl === 0) { m.visible = false; continue; }
       if (lvl === 2) {
-        // broken: let the layered debris (pit + torn canvas + wood) read instead of a flat square
+        // broken: remove the canvas tile → a real hole down to the subfloor, then add debris
         m.visible = false;
+        if (this._surfaceTiles?.[k]) this._surfaceTiles[k].visible = false;
         this.spawnRingDebris(k);
       } else {
         // cracked/bent canvas: a dark sagging patch tilted slightly
