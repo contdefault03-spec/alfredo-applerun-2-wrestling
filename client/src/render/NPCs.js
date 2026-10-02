@@ -79,7 +79,9 @@ class Human {
     let mesh = null; src.updateMatrixWorld(true);
     src.traverse((o) => { if ((o.isMesh || o.isSkinnedMesh) && !mesh) mesh = o; });
     if (!mesh) return false;
-    const rig = autoRig(mesh, RIG);
+    // Estimate the skeleton from THIS model's own geometry (hands/arms land where the
+    // mesh actually has them) rather than a fixed T-pose rig that stumped the hands.
+    const rig = autoRig(mesh, null);
     const topY = rig.joints?.headTop?.y || 1;
     const sc = this.scale / topY;             // normalise the GLB to the NPC height
     if (this._rigMesh) this.pivot.remove(this._rigMesh);
@@ -92,6 +94,7 @@ class Human {
     this.solver = new PoseSolver(rig);
     this.legLenM = this.solver.legLen * sc;
     this._rigMesh = rig.mesh;
+    this._rigJoints = rig.joints;
     return true;
   }
 
