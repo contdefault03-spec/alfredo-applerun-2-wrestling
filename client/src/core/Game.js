@@ -98,6 +98,10 @@ export class Game {
     await this.assets.loadProp('girl', 'assets/characters/girl.glb').then(() => this.buildRingGirls()).catch((e) => console.warn('girl load failed', e));
     await Promise.all([this.assets.loadProp('car1', 'assets/characters/car1.glb'), this.assets.loadProp('car2', 'assets/characters/car2.glb')])
       .then(() => this.arena.placeCars(this.assets)).catch((e) => console.warn('car load failed', e));
+    await Promise.all([
+      this.assets.loadProp('ref', 'assets/characters/ref.glb').then((s) => this.skinNPC(this.referee, s)).catch((e) => console.warn('ref.glb', e)),
+      this.assets.loadProp('ann', 'assets/characters/ann.glb').then((s) => this.skinNPC(this.announcer, s)).catch((e) => console.warn('ann.glb', e)),
+    ]);
     this.ui.loading(0.95, 'Warming up…');
     this.ui.portraits = makePortraits(this.renderer.renderer, this.assets);
     this.ui.hideLoading();
@@ -661,6 +665,21 @@ export class Game {
     this.audio.play('metal', p, { volume: 1.3 });
     this.audio.crowdPop?.(1.1);
     this.camera.shake(0.5);
+  }
+
+  /** Replace a procedural NPC's look with a GLB model (same behavior/position). */
+  skinNPC(npc, src) {
+    if (!npc || !src) return;
+    const m = src.clone(true);
+    const box = new THREE.Box3().setFromObject(m);
+    const h = Math.max(0.1, box.max.y - box.min.y);
+    const sc = (npc.scale || 1.78) / h;
+    m.scale.setScalar(sc);
+    m.position.y = -box.min.y * sc;
+    m.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    npc.root.add(m);
+    if (npc.pivot) npc.pivot.visible = false; // hide the procedural body
+    npc._glb = m;
   }
 
   /** Ring girls (girl.glb) around ringside – shown for entrances + after the bell. */
