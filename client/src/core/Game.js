@@ -230,6 +230,7 @@ export class Game {
     this.restoreReferee();
     this.setRingGirls(false);
     this.arena?.resetRingDamage?.();
+    this.arena?.resetCars?.();
     if (this.session) { this.session.dispose?.(); this.session = null; }
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
@@ -436,13 +437,15 @@ export class Game {
     this.arena.setCageDoor(view.cageDoor);
     this.setRingGirls(['entrances', 'finished', 'over'].includes(view.match.phase));
     if (this._winnerMedia && ['finished', 'over'].includes(view.match.phase)) this.entranceDir?.drawWinner();
-    // slam/crash into a parked car → windshield shatters (glass + blood)
-    for (const f of view.fighters) {
+    // slam/crash into a parked car → windshield shatters (glass + blood).
+    // Use the live world locally (exact positions); online falls back to the interpolated view.
+    const carFighters = this.session.world?.fighters ?? view.fighters;
+    for (const f of carFighters) {
       if (!f.outside || f.hidden) continue;
       const spd = Math.hypot(f.vx || 0, f.vz || 0);
       if (spd < 4 && !['down', 'knockdown', 'airborne'].includes(f.state)) continue;
       const car = this.arena.carNear(f.x, f.z, 2.4);
-      if (car && this.arena.breakCar(car)) this.carCrashFX(car);
+      if (car && !car.broken && !car._crashing) { const stage = this.arena.breakCar(car); if (stage) this.carCrashFX(car, stage, f); }
     }
     const diver = view.fighters.find((f) => f.state === S.RAFTER || f.state === S.RAFTER_DROP);
     this.arena.showDropShadow(diver?.x || 0, diver?.z || 0, !!diver);
@@ -492,7 +495,7 @@ export class Game {
     if (st === S.PINNED) return [{ key: 'MASH J / K', text: 'KICK OUT!', hot: true }];
     if (st === S.DOWN || st === S.KNOCKDOWN) return [{ key: 'MASH', text: 'to get up faster' }];
     if (st === S.CORNER_STUN) return [{ key: 'MASH', text: 'to recover' }];
-    if (st === S.HOLD) return [{ key: 'J', text: 'Strike' }, { key: 'K', text: 'Slam (S+K: suplex)' }, { key: 'E', text: 'Throw / Irish whip' }, ...(ab?.kind === 'grapple' ? [{ key: 'X', text: ab.name, hot: me.meter >= me.c.specialCost && me.specialCd <= 0 }] : [])];
+    if (st === S.HOLD) return [{ key: 'WASD', text: 'Drag them' }, { key: 'J', text: 'Strike' }, { key: 'K', text: 'Slam (S+K: suplex)' }, { key: 'G', text: 'Throw / Irish whip' }, ...(ab?.kind === 'grapple' ? [{ key: 'X', text: ab.name, hot: me.meter >= me.c.specialCost && me.specialCd <= 0 }] : [])];
     if (st === S.PERCH) return [{ key: 'J / K', text: 'DIVE!', hot: true }, { key: 'SHIFT + F', text: 'Climb to the rafters' }, { key: 'F', text: 'Climb down' }];
     if (st === S.RAFTER) return [{ key: 'WASD', text: 'Move out over the ring' }, { key: 'F / J', text: 'HIGH DROP!', hot: true }];
     if (st === S.RAFTER_CLIMB || st === S.RAFTER_DROP) return [];
@@ -705,22 +708,41 @@ export class Game {
     this.audio.crowdBoo?.(0.5);
   }
 
-  /** Windshield smash: real glass shards fly off + blood + crack the pane. */
-  carCrashFX(car) {
+  /**
+   * Windshield damage FX. Two beats: 'crack' (impact + a few glints, glass holds)
+   * then 'shatter' (real glass shards fly off, blood if someone's hurt). A single
+   * crash auto-progresses crack → shatter so one slam reads as both.
+   */
+  carCrashFX(car, stage = 'shatter', victim = null) {
     const p = new THREE.Vector3(car.pane ? car.pane.position.x : car.x, car.pane ? car.pane.position.y : 1.2, car.pane ? car.pane.position.z : car.z);
-    this.effects.burst(p, { n: 40, speed: 5, color: [0.82, 0.93, 1], size: 0.05, life: 1.0, additive: true, grav: 2.2, up: 1.5 });      // glass glint
-    this.effects.burst(p, { n: 18, speed: 3, color: [0.72, 0.02, 0.04], size: 0.1, life: 1.2, additive: false, grav: 2.4, up: 1 });       // blood
-    // physical glass shards that fly and fall
-    const shardMat = new THREE.MeshStandardMaterial({ color: 0xbfe0ef, transparent: true, opacity: 0.6, roughness: 0.1, metalness: 0.3 });
-    for (let i = 0; i < 12; i++) {
-      const s = new THREE.Mesh(new THREE.TetrahedronGeometry(0.06 + Math.random() * 0.06), shardMat);
-      s.position.copy(p); this.scene.add(s);
-      const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 3;
-      this.gorePieces.push({ mesh: s, vx: Math.cos(a) * sp, vy: 2 + Math.random() * 2.5, vz: Math.sin(a) * sp - 2, spin: (Math.random() - 0.5) * 20, landed: false });
+    this.audio.play('metal', p, { volume: stage === 'crack' ? 0.9 : 1.3 });
+    if (stage === 'crack') {
+      // impact: dent/thud + a spray of tiny glass glints as the web forms
+      this.effects.burst(p, { n: 14, speed: 3, color: [0.82, 0.93, 1], size: 0.04, life: 0.6, additive: true, grav: 2.0, up: 1.2 });
+      this.camera.shake(0.3); this.camera.punch(2);
+      this.audio.crowdPop?.(0.6);
+      // a hard crash keeps going – shatter a beat later so one slam shows crack → break
+      car._crashing = true;
+      setTimeout(() => { car._crashing = false; if (this.state === 'match' && !car.broken) { this.arena.breakCar(car); this.carCrashFX(car, 'shatter', victim); } }, 420);
+      return;
     }
-    this.audio.play('metal', p, { volume: 1.3 });
-    this.audio.crowdPop?.(1.1);
-    this.camera.shake(0.5);
+    // shatter
+    this.effects.burst(p, { n: 46, speed: 5, color: [0.82, 0.93, 1], size: 0.05, life: 1.0, additive: true, grav: 2.2, up: 1.6 });      // glass glint
+    const hurt = victim && (victim.hp == null || victim.hp < (victim.maxHp ?? 600) * 0.5);
+    if (this.settings.get().gore !== false && hurt) {
+      this.effects.burst(p, { n: 20, speed: 3, color: [0.72, 0.02, 0.04], size: 0.11, life: 1.2, additive: false, grav: 2.4, up: 1 });   // blood (only when badly hurt)
+      this.bloodDecal(p.x, p.z, 0.7);
+    }
+    // physical glass shards that fly, fall and stay on the ground
+    const shardMat = new THREE.MeshStandardMaterial({ color: 0xbfe0ef, transparent: true, opacity: 0.6, roughness: 0.1, metalness: 0.3 });
+    for (let i = 0; i < 16; i++) {
+      const s = new THREE.Mesh(new THREE.TetrahedronGeometry(0.05 + Math.random() * 0.07), shardMat);
+      s.position.copy(p); this.scene.add(s);
+      const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 3.5;
+      this.gorePieces.push({ mesh: s, vx: Math.cos(a) * sp, vy: 2 + Math.random() * 2.8, vz: Math.sin(a) * sp - 2, spin: (Math.random() - 0.5) * 22, landed: false });
+    }
+    this.audio.crowdPop?.(1.2);
+    this.camera.shake(0.55); this.camera.punch(3);
   }
 
   /** Give a procedural NPC a GLB body, re-rigged so it still animates (no T-pose). */

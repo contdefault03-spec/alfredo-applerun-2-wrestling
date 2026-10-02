@@ -163,6 +163,21 @@ test('grab → slam puts the opponent down; Lucky cannot lift Ajan (takedown ins
   assert.ok(ev2.some((e) => e.type === 'hit' && e.move === 'takedown'));
 });
 
+test('a held opponent can be carried/dragged around, staying in front of the carrier', () => {
+  const w = world(['ajan', 'lucky']); // Ajan easily holds Lucky
+  const a = w.byId(1), v = w.byId(2);
+  a.x = 0; a.z = 0; a.yaw = 0; faceEachOther(a, v, 0.9);
+  a.input.pressed = BTN.GRAB; steps(w, 30);
+  assert.equal(a.state, S.HOLD); assert.equal(v.state, S.HELD);
+  const x0 = a.x, z0 = a.z;
+  // drag forward (+z) for a while
+  steps(w, 110, () => { a.input.mx = 0; a.input.mz = 1; a.input.held = 0; });
+  assert.ok(Math.hypot(a.x - x0, a.z - z0) > 1.2, `carrier moved while holding (moved ${Math.hypot(a.x - x0, a.z - z0).toFixed(2)})`);
+  assert.equal(a.state, S.HOLD, 'still carrying after dragging'); assert.equal(v.state, S.HELD);
+  const gap = Math.hypot(v.x - a.x, v.z - a.z);
+  assert.ok(gap < 1.0, `victim stays in the carrier's arms (gap ${gap.toFixed(2)})`);
+});
+
 test('held wrestlers can mash free', () => {
   const w = world(['rise', 'masked']);
   const a = w.byId(1), b = w.byId(2);

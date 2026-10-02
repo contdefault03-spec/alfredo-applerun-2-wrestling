@@ -112,8 +112,13 @@ export class Arena {
           // in the moat between the barricade and the stands – stay there until they vault back
           const ox = St.innerX - r, oz = St.innerZ - r;   // outer wall (front of the stands)
           const ix = B.halfX + r, iz = B.halfZ + r;        // the rail, from the moat side
+          // the entrance (+z) side has no stands – it opens onto the ramp/stage where the cars are parked,
+          // so let a wrestler roam up that apron (and be dragged into a car) instead of a stands wall there.
+          const onRamp = e.z > 0 && Math.abs(e.x) < E.halfRamp - r;
+          const ozPlus = onRamp ? E.zEnd - r : oz;
           if (Math.abs(e.x) > ox) { const s = Math.sign(e.x); hit('barricade', -s, 0); e.x = s * ox; if (Math.sign(e.vx) === s) e.vx = 0; }
-          if (Math.abs(e.z) > oz) { const s = Math.sign(e.z); hit('barricade', 0, -s); e.z = s * oz; if (Math.sign(e.vz) === s) e.vz = 0; }
+          if (e.z > ozPlus) { hit('barricade', 0, -1); e.z = ozPlus; if (e.vz > 0) e.vz = 0; }
+          else if (e.z < -oz) { hit('barricade', 0, 1); e.z = -oz; if (e.vz < 0) e.vz = 0; }
           // can't walk back in through the rail – push out along the shallower axis
           if (Math.abs(e.x) < ix && Math.abs(e.z) < iz) {
             if (ix - Math.abs(e.x) <= iz - Math.abs(e.z)) { const s = Math.sign(e.x) || 1; e.x = s * ix; if (Math.sign(e.vx) !== s) e.vx = 0; }
