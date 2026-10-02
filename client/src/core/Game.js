@@ -227,6 +227,7 @@ export class Game {
     this.entranceDir?.stop();
     this.clearGore();
     this.setRingGirls(false);
+    this.arena?.resetRingDamage?.();
     if (this.session) { this.session.dispose?.(); this.session = null; }
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
