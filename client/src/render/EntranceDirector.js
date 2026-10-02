@@ -40,17 +40,18 @@ export class EntranceDirector {
     this.getNet = null;         // set by Game: () => net client (online)
   }
 
-  // Cinematic shot list – each returns {pos,look} for the current entrant E.
-  // Hard cuts between shots give the broadcast feel.
+  // Cinematic shot list – cam(E, SZ, u) where u is 0..1 progress WITHIN the shot,
+  // so the camera dollies/cranes/trucks instead of sitting still. Hard cuts
+  // between shots give the broadcast feel. All angles stay inside the arena.
   static SHOTS = [
-    { end: 0.10, cam: (E, SZ) => ({ pos: [7, 3.2, SZ + 5], look: [0, 2.2, SZ - 1] }) },          // wide reveal at the tunnel
-    { end: 0.20, cam: (E) => ({ pos: [-9, 6, 2], look: [-12.5, 7, 8] }) },                         // crowd cutaway
-    { end: 0.32, cam: (E) => ({ pos: [E.x - 1.7, E.y + 1.75, E.z - 1.6], look: [E.x, E.y + 1.55, E.z] }) }, // close-up, smiling
-    { end: 0.46, cam: (E) => ({ pos: [E.x + 4.5, E.y + 1.8, E.z + 0.4], look: [E.x, E.y + 1.3, E.z] }) }, // side tracking walk
-    { end: 0.56, cam: () => ({ pos: [0, 15, -17], look: [0, 1, 3] }) },                            // whole stadium
-    { end: 0.66, cam: (E, SZ) => ({ pos: [0, 6.8, SZ - 3.5], look: [0, 7.4, SZ + 5.4] }) },        // the titantron (video)
-    { end: 0.80, cam: (E) => ({ pos: [E.x - Math.sin(E.yaw) * 4.5, E.y + 2.6, E.z - Math.cos(E.yaw) * 4.5], look: [E.x, E.y + 1.3, E.z] }) }, // behind, toward the ring
-    { end: 1.01, cam: () => ({ pos: [4.6, 3.2, -5.6], look: [0, ARENA.ring.height + 1.2, 0] }) },  // ring hero shot
+    { end: 0.11, cam: (E, SZ, u) => ({ pos: [5 - u * 2.5, 3.4 - u * 1.2, SZ + 6 - u * 3], look: [0, 2.1, SZ - 1] }) },               // push in on the tunnel
+    { end: 0.22, cam: (E, s, u) => ({ pos: [E.x + Math.sin(u * 1.2 + 0.4) * 3, E.y + 0.7, E.z + Math.cos(u * 1.2 + 0.4) * 3], look: [E.x, E.y + 1.45, E.z] }) }, // low hero orbit
+    { end: 0.33, cam: (E, s, u) => ({ pos: [E.x - 1.7 + u * 1.0, E.y + 1.72, E.z - 1.5], look: [E.x, E.y + 1.55, E.z] }) },           // close-up, slow dolly across the face
+    { end: 0.46, cam: (E, s, u) => ({ pos: [E.x + 4.6, E.y + 1.9, E.z + (u - 0.5) * 4], look: [E.x, E.y + 1.3, E.z] }) },             // trucking side shot of the walk
+    { end: 0.57, cam: (E, s, u) => ({ pos: [0, 6 + u * 9, -5 - u * 13], look: [0, 1.4, 3] }) },                                       // crane up to the whole stadium
+    { end: 0.67, cam: (E, SZ, u) => ({ pos: [-2 + u * 4, 6.8, SZ - 3.5], look: [0, 7.4, SZ + 5.4] }) },                               // pan across the titantron
+    { end: 0.82, cam: (E, s, u) => ({ pos: [E.x - Math.sin(E.yaw) * (5.5 - u * 1.5), E.y + 2.7 - u * 1.0, E.z - Math.cos(E.yaw) * (5.5 - u * 1.5)], look: [E.x, E.y + 1.2, E.z] }) }, // push in from behind toward the ring
+    { end: 1.01, cam: (E, s, u) => ({ pos: [Math.sin(0.5 + u * 1.1) * 6, 3.2, Math.cos(0.5 + u * 1.1) * -6], look: [0, ARENA.ring.height + 1.2, 0] }) }, // orbit the ring hero shot
   ];
 
   /** Normalised entrance state from either session view, or null when not entering. */
@@ -87,13 +88,14 @@ export class EntranceDirector {
     const spawnX = f._spawnX ?? (f._spawnX = f.x);
     const spawnZ = f._spawnZ ?? (f._spawnZ = f.z);
     const ringH = ARENA.ring.height;
+    const reveal = f.charId === 'ajan' ? 0.22 : 0.12; // Ajan lingers at the tunnel to stomp
     let x, y, z, walking = false;
-    if (p < 0.12) {                 // reveal / pose on the stage
+    if (p < reveal) {               // reveal / pose (or stomp) on the stage
       x = 0; z = STAGE_Z; y = 0;
-    } else if (p < 0.72) {          // walk down the ramp toward the ring
-      const u = (p - 0.12) / 0.6; x = spawnX * 0.35 * u; z = STAGE_Z + (APPROACH_Z - STAGE_Z) * u; y = 0; walking = true;
+    } else if (p < 0.78) {          // walk down the ramp toward the ring
+      const u = (p - reveal) / (0.78 - reveal); x = spawnX * 0.35 * u; z = STAGE_Z + (APPROACH_Z - STAGE_Z) * u; y = 0; walking = true;
     } else if (p < 0.9) {           // climb into the ring
-      const u = (p - 0.72) / 0.18; x = spawnX * 0.35 + (spawnX - spawnX * 0.35) * u; z = APPROACH_Z + (spawnZ - APPROACH_Z) * u; y = ringH * u; walking = true;
+      const u = (p - 0.78) / 0.12; x = spawnX * 0.35 + (spawnX - spawnX * 0.35) * u; z = APPROACH_Z + (spawnZ - APPROACH_Z) * u; y = ringH * u; walking = true;
     } else {                        // settle at the ring spawn, final pose
       x = spawnX; z = spawnZ; y = ringH;
     }
@@ -120,7 +122,7 @@ export class EntranceDirector {
     const charId = f?.charId;
     if (en.fighterId != null && en.fighterId !== this._mediaFor) {
       this.startMedia(charId);
-      this._mediaFor = en.fighterId; this._announced = false; this._coatThrown = false; this._firedEntry = false; this._shot = -1;
+      this._mediaFor = en.fighterId; this._announced = false; this._coatThrown = false; this._firedEntry = false; this._shot = -1; this._lastStomp = 0;
       // Max walks out in his coat/hat/glasses model
       const em = charId ? getEntrance(charId).entranceModel : null;
       if (em && this.assets && this.views.get(en.fighterId)) {
@@ -128,6 +130,16 @@ export class EntranceDirector {
       }
     }
     this.drawTron(charId, en);
+
+    // Ajan stomps at the tunnel before he walks out – shake, dust, booms
+    if (charId === 'ajan' && getEntrance('ajan').stomps && en.p < 0.22) {
+      if (this.t - (this._lastStomp || 0) > 0.55) {
+        this._lastStomp = this.t; this._shake = 1.0;
+        this.audio.play?.('impact', { x: 0, y: 0, z: STAGE_Z }, { volume: 1.3 });
+        this.audio.crowdPop?.(0.6);
+        if (this.effects) this.effects.burst({ x: (Math.random() - 0.5) * 2.5, y: 0.1, z: STAGE_Z }, { n: 18, speed: 3.5, color: [0.42, 0.34, 0.24], size: 0.16, life: 0.8, additive: false, grav: 1.6, up: 1.8 });
+      }
+    }
 
     // Max flings his coat/hat/glasses into the crowd mid-ramp
     if (charId && !this._coatThrown && en.p > 0.5 && getEntrance(charId).coatThrow && f) {
@@ -162,7 +174,9 @@ export class EntranceDirector {
     const shots = EntranceDirector.SHOTS;
     let idx = shots.findIndex((s) => en.p < s.end);
     if (idx < 0) idx = shots.length - 1;
-    const tgt = shots[idx].cam(E, SZ);
+    const prevEnd = idx > 0 ? shots[idx - 1].end : 0;
+    const u = Math.max(0, Math.min(1, (en.p - prevEnd) / Math.max(0.001, shots[idx].end - prevEnd)));
+    const tgt = shots[idx].cam(E, SZ, u);
     const cam = this.camera?.cam;
     if (!cam) return;
     const tp = this._camTarget.set(tgt.pos[0], tgt.pos[1], tgt.pos[2]);
@@ -170,12 +184,17 @@ export class EntranceDirector {
     if (idx !== this._shot) {            // hard cut
       this._shot = idx;
       cam.position.copy(tp); this._look.copy(tl);
-    } else {                             // gentle drift within a shot
-      cam.position.lerp(tp, Math.min(1, dt * 2.2));
-      this._look.lerp(tl, Math.min(1, dt * 5));
+    } else {                             // smooth dolly within a shot
+      cam.position.lerp(tp, Math.min(1, dt * 3));
+      this._look.lerp(tl, Math.min(1, dt * 6));
+    }
+    // camera shake (Ajan stomps, big pops)
+    this._shake = Math.max(0, (this._shake || 0) - dt * 2);
+    if (this._shake > 0.001) {
+      const s = this._shake * this._shake * 0.4;
+      cam.position.x += (Math.random() - 0.5) * s; cam.position.y += (Math.random() - 0.5) * s; cam.position.z += (Math.random() - 0.5) * s;
     }
     cam.lookAt(this._look);
-    // keep CameraSystem roughly in sync for a smooth hand-off to gameplay
     if (this.camera.pos) this.camera.pos.copy(cam.position);
     if (this.camera.focus) this.camera.focus.copy(this._look);
   }
