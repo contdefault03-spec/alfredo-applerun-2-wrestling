@@ -14,10 +14,11 @@ function live(chars = ['ajan', 'lucky']) {
   return w;
 }
 
-test('RUN + interact from the turnbuckle climbs up to the rafters', () => {
+test('interact at the back-stands zipline rides up over the ring', () => {
   const w = live(); const f = w.byId(1);
-  f.x = R.postInset; f.z = R.postInset; f.state = S.PERCH; f.zone = 'ring';
-  f.input.held = BTN.RUN; f.input.pressed = BTN.INTERACT;
+  // vaulted out into the back moat, standing on the zipline platform
+  f.outside = true; f.zone = 'floor'; f.x = 0; f.z = -(ARENA.barricade.halfZ + 0.3); f.y = 0; f.state = S.IDLE;
+  f.input.pressed = BTN.INTERACT;
   w.step();
   assert.equal(f.state, S.RAFTER_CLIMB);
   for (let i = 0; i < Math.ceil(1.6 / DT); i++) w.step();

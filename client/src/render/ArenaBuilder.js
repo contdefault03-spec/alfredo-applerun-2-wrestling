@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ARENA } from '@shared/config/arena.js';
 import { RING_GRID } from '@shared/sim/constants.js';
-import { CELL, cellCenter, levelFromHits } from '@shared/sim/RingDestruction.js';
+import { CELL, EXTENT, cellCenter, levelFromHits } from '@shared/sim/RingDestruction.js';
 import * as TX from './Textures.js';
 
 const R = ARENA.ring;
@@ -69,6 +69,23 @@ export class ArenaView {
     this.buildStands();
     this.buildLights();
     this.buildCage();
+    this.buildZipline();
+  }
+
+  /** A zipline from a platform in the back stands up over the ring (the overhead-drop route). */
+  buildZipline() {
+    const B = ARENA.barricade, topY = 7.2, startZ = -(B.halfZ + 1.2);
+    const metal = std({ color: 0x1a1c22, roughness: 0.5, metalness: 0.85 });
+    // launch platform + support tower at the back
+    add(this.group, new THREE.BoxGeometry(2.4, 0.2, 1.6), metal, { pos: [0, topY, startZ] });
+    for (const sx of [-1, 1]) add(this.group, new THREE.CylinderGeometry(0.1, 0.12, topY, 10), metal, { pos: [sx * 1.0, topY / 2, startZ] });
+    // the cable itself, sloping down from the platform to above the ring centre
+    const a = new THREE.Vector3(0, topY + 0.2, startZ), bpt = new THREE.Vector3(0, topY - 0.4, 0.3);
+    const len = a.distanceTo(bpt);
+    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 6), std({ color: 0x0a0a0c, metalness: 0.7, roughness: 0.4 }));
+    cable.position.copy(a).lerp(bpt, 0.5);
+    cable.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bpt.clone().sub(a).normalize());
+    cable.frustumCulled = false; this.group.add(cable);
   }
 
   // ── floor & mats ──
@@ -88,8 +105,21 @@ export class ArenaView {
     const apronTex = TX.apronTexture();
     const skirt = std({ map: apronTex, roughness: 0.8 });
     const canvasMat = std({ map: TX.ringCanvasTexture(), roughness: 0.88, metalness: 0 });
-    const plat = new THREE.BoxGeometry(A * 2, H, A * 2);
-    add(g, plat, [skirt, skirt, canvasMat, skirt, skirt, skirt], { pos: [0, H / 2, 0] });
+    // Recessed platform: the solid body stops SUB below the canvas, leaving an
+    // under-ring space. The canvas surface is a grid of tiles on top; break a tile
+    // and there's a real hole down to the dark subfloor (a fallen wrestler is visible).
+    const SUB = 0.8;
+    const subMat = std({ color: 0x241913, roughness: 1 }); // dark wooden subfloor seen through holes
+    const plat = new THREE.BoxGeometry(A * 2, H - SUB, A * 2);
+    add(g, plat, [skirt, skirt, subMat, skirt, skirt, skirt], { pos: [0, (H - SUB) / 2, 0] });
+    // the 9 destructible canvas tiles over the playing area (indexed by destruction cell)
+    this._surfaceTiles = [];
+    const tileGeo = new THREE.BoxGeometry(CELL, 0.08, CELL);
+    for (let k = 0; k < 9; k++) { const c = cellCenter(k); this._surfaceTiles[k] = add(g, tileGeo, canvasMat, { pos: [c.x, H - 0.04, c.z] }); }
+    // solid canvas border frame from the playing area out to the apron edge (never breaks)
+    const bw = A - EXTENT;
+    for (const [ox, oz, w, d] of [[0, (A + EXTENT) / 2, A * 2, bw], [0, -(A + EXTENT) / 2, A * 2, bw], [(A + EXTENT) / 2, 0, bw, EXTENT * 2], [-(A + EXTENT) / 2, 0, bw, EXTENT * 2]])
+      add(g, new THREE.BoxGeometry(w, 0.08, d), canvasMat, { pos: [ox, H - 0.04, oz] });
     // apron edge trim
     const trim = std({ color: 0x0a0c14, roughness: 0.4, metalness: 0.4 });
     for (const s of [-1, 1]) {
@@ -253,7 +283,7 @@ export class ArenaView {
       const scale = 4.3 / len;                                   // ~4.3 m long
       car.scale.setScalar(scale);
       car.position.set(s.x, -box.min.y * scale, s.z);
-      car.rotation.y = Math.atan2(-s.x, stageZ - s.z);           // face the stage/entrance
+      car.rotation.y = Math.atan2(-s.x, -s.z);                   // face the arena/ring (center)
       car.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
       this.group.add(car);
       // a windshield pane (breakable) sitting on the car, tilted, facing the stage
@@ -434,6 +464,7 @@ export class ArenaView {
       this._debris = {};
     }
     if (this.ringDmgCells) for (let k = 0; k < this.ringDmgCells.length; k++) { this.ringDmgCells[k].visible = false; this.ringDmgState[k] = 0; }
+    if (this._surfaceTiles) for (const t of this._surfaceTiles) t.visible = true;   // restore broken canvas tiles
     // restore snapped ropes
     if (this._ropeDebris) { for (const g of this._ropeDebris) { this.group.remove(g); g.traverse((o) => { if (o.isMesh) { o.geometry?.dispose?.(); o.material?.dispose?.(); } }); } this._ropeDebris = []; }
     for (const rope of this.ropes || []) { rope.mesh.visible = true; rope.broken = false; }
@@ -466,8 +497,9 @@ export class ArenaView {
       const m = this.ringDmgCells[k];
       if (lvl === 0) { m.visible = false; continue; }
       if (lvl === 2) {
-        // broken: let the layered debris (pit + torn canvas + wood) read instead of a flat square
+        // broken: remove the canvas tile → a real hole down to the subfloor, then add debris
         m.visible = false;
+        if (this._surfaceTiles?.[k]) this._surfaceTiles[k].visible = false;
         this.spawnRingDebris(k);
       } else {
         // cracked/bent canvas: a dark sagging patch tilted slightly
@@ -503,6 +535,37 @@ export class ArenaView {
     for (const z of [-3, 1.5]) banner(B.halfX - inset, z, -Math.PI / 2);
     // entrance side (z = +halfZ) either side of the walkway gap, face -Z
     for (const x of [-5.2, 5.2]) banner(x, B.halfZ - inset, Math.PI);
+    this.buildWallAds(mats);
+  }
+
+  /** Big sponsor boards high on the far left/right black walls + an overhead light/metal rig. */
+  buildWallAds(mats) {
+    const St = ARENA.stands;
+    const wallX = St.innerX + St.rows * St.rowDepth + 1.5;   // just behind the top of the stands
+    const bigGeo = new THREE.PlaneGeometry(14, 6);
+    // a big board on each side wall, facing inward, up above the crowd
+    const L = add(this.group, bigGeo, mats[0], { cast: false, receive: false, pos: [-wallX, 7.5, 0] }); L.rotation.y = Math.PI / 2;
+    const Rr = add(this.group, bigGeo, mats[1 % mats.length], { cast: false, receive: false, pos: [wallX, 7.5, 0] }); Rr.rotation.y = -Math.PI / 2;
+    // dark backing walls behind the boards so they read on "black walls"
+    const wallMat = std({ color: 0x050507, roughness: 1 });
+    const wallGeo = new THREE.PlaneGeometry(26, 12);
+    const bL = add(this.group, wallGeo, wallMat, { cast: false, pos: [-wallX - 0.1, 7, 0] }); bL.rotation.y = Math.PI / 2;
+    const bR = add(this.group, wallGeo, wallMat, { cast: false, pos: [wallX + 0.1, 7, 0] }); bR.rotation.y = -Math.PI / 2;
+    // overhead metal truss rig + light fixtures
+    const metal = std({ color: 0x1a1c22, roughness: 0.5, metalness: 0.8 });
+    const bulb = new THREE.MeshBasicMaterial({ color: 0xfff4d8, toneMapped: false });
+    const trussY = 12.5;
+    for (const sx of [-1, 1]) {
+      // a truss beam running along each side, up high
+      add(this.group, new THREE.BoxGeometry(0.4, 0.4, 20), metal, { cast: false, pos: [sx * (St.innerX - 0.5), trussY, 0] });
+      // a row of downlight fixtures hung off it
+      for (const z of [-7, -3.5, 0, 3.5, 7]) {
+        add(this.group, new THREE.BoxGeometry(0.5, 0.3, 0.5), metal, { cast: false, pos: [sx * (St.innerX - 0.5), trussY - 0.4, z] });
+        add(this.group, new THREE.CircleGeometry(0.22, 12), bulb, { cast: false, pos: [sx * (St.innerX - 0.5), trussY - 0.62, z] }).rotation.x = -Math.PI / 2;
+      }
+    }
+    // cross beams front/back
+    for (const z of [-9, 9]) add(this.group, new THREE.BoxGeometry(St.innerX * 2, 0.35, 0.35), metal, { cast: false, pos: [0, trussY, z] });
   }
 
   // ── commentary desk ──

@@ -96,17 +96,32 @@ export class EntranceDirector {
     } else if (p < 0.78) {          // walk down the ramp toward the ring
       const raw = (p - reveal) / (0.78 - reveal);
       // human pacing: a slight speed ripple (occasional slow/fast) instead of a constant march
-      const uu = Math.max(0, Math.min(1, raw + Math.sin(raw * Math.PI * 2.5) * 0.035));
+      let uu = Math.max(0, Math.min(1, raw + Math.sin(raw * Math.PI * 2.5) * 0.035));
       // a gentle side-to-side zig-zag that settles as they near the ring; per-character amount
       const swayAmt = f.charId === 'lucky' ? 0.14 : f.charId === 'max' ? 0.5 : f.charId === 'ajan' ? 0.25 : 0.4;
-      const sway = Math.sin(raw * Math.PI * 3 + (f._spawnX || 0)) * swayAmt * (1 - raw);
-      x = spawnX * 0.35 * uu + sway; z = STAGE_Z + (APPROACH_Z - STAGE_Z) * uu; y = 0; walking = true;
+      let sway = Math.sin(raw * Math.PI * 3 + (f._spawnX || 0)) * swayAmt * (1 - raw);
+      y = 0;
+      if (f.charId === 'lucky') {            // SPRINT in fast, with bouncy hops
+        uu = Math.min(1, raw * 1.9);
+        y = Math.abs(Math.sin(raw * Math.PI * 6)) * 0.28;   // quick hops
+        f.runTime = (f.runTime || 0) + dt * 2;
+      } else if (f.charId === 'masked' && raw < 0.5) {       // MOONWALK: glide backward before heading in
+        const m = raw / 0.5;
+        uu = m * 0.25 - Math.sin(m * Math.PI * 4) * 0.06;    // drift back and forth, net little forward
+        sway += Math.sin(m * Math.PI * 5) * 0.25;
+      }
+      x = spawnX * 0.35 * uu + sway; z = STAGE_Z + (APPROACH_Z - STAGE_Z) * uu; walking = true;
       f._lookCrowd = Math.sin(raw * Math.PI * 4) * 0.3; // slight head/body turn toward the crowd
-    } else if (p < 0.9) {           // climb into the ring
-      const u = (p - 0.78) / 0.12; x = spawnX * 0.35 + (spawnX - spawnX * 0.35) * u; z = APPROACH_Z + (spawnZ - APPROACH_Z) * u; y = ringH * u; walking = true;
+    } else if (p < 0.9) {           // climb UP onto the apron, then step in (not a diagonal float)
+      const u = (p - 0.78) / 0.12;
+      y = ringH * Math.min(1, u * 2);                     // rise onto the ring in the first half = a climb
+      x = spawnX * 0.35 + (spawnX - spawnX * 0.35) * u;
+      z = APPROACH_Z + (spawnZ - APPROACH_Z) * u;
+      walking = true;
     } else {                        // settle at the ring spawn, final pose
       x = spawnX; z = spawnZ; y = ringH;
     }
+    f.relaxed = true;              // casual/cool entrance posture (no combat guard on the way out)
     f.x = x; f.y = y; f.z = z; f.yaw = Math.atan2(-x, -z) + (walking ? (f._lookCrowd || 0) : 0);
     if (walking) {
       // fake forward velocity so the Animator actually plays the walk cycle
@@ -131,6 +146,10 @@ export class EntranceDirector {
     if (en.fighterId != null && en.fighterId !== this._mediaFor) {
       this.startMedia(charId);
       this._mediaFor = en.fighterId; this._announced = false; this._coatThrown = false; this._firedEntry = false; this._shot = -1; this._lastStomp = 0;
+      this.clearHandProp();
+      const cfg0 = charId ? getEntrance(charId) : null;
+      if (cfg0?.eatFood) this.spawnHandProp('food');
+      else if (cfg0?.cigarette) this.spawnHandProp('cig');
       // Max walks out in his coat/hat/glasses model
       const em = charId ? getEntrance(charId).entranceModel : null;
       if (em && this.assets && this.views.get(en.fighterId)) {
@@ -138,6 +157,7 @@ export class EntranceDirector {
       }
     }
     this.drawTron(charId, en);
+    if (f) this.updateHandProp(f, charId, en.p);
 
     // Ajan stomps at the tunnel before he walks out – shake, dust, booms
     if (charId === 'ajan' && getEntrance('ajan').stomps && en.p < 0.22) {
@@ -207,6 +227,48 @@ export class EntranceDirector {
     if (this.camera.focus) this.camera.focus.copy(this._look);
   }
 
+  /** A handheld entrance prop: Ajan's food or Rize's cigarette. */
+  spawnHandProp(kind) {
+    let mesh;
+    if (kind === 'food') {
+      mesh = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshStandardMaterial({ color: 0x9a5a2a, roughness: 0.8 }));
+    } else {
+      const g = new THREE.Group();
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.13, 6), new THREE.MeshStandardMaterial({ color: 0xf4f0e4 }));
+      stick.rotation.z = Math.PI / 2; g.add(stick);
+      const ember = new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff5a1e }));
+      ember.position.x = 0.07; g.add(ember); mesh = g;
+    }
+    mesh.frustumCulled = false; this.scene.add(mesh);
+    this._handProp = { kind, mesh, eaten: false };
+  }
+  clearHandProp() {
+    if (!this._handProp) return;
+    try { this.scene.remove(this._handProp.mesh); } catch { /* ignore */ }
+    this._handProp = null;
+  }
+  updateHandProp(f, charId, p) {
+    const hp = this._handProp; if (!hp) return;
+    const h = (f.c?.height || 1.8);
+    const fw = { x: Math.sin(f.yaw), z: Math.cos(f.yaw) };
+    if (hp.kind === 'food') {
+      // eat it mid-walk: food leaves the hand (munch burst), reappears once in the ring
+      if (!hp.eaten && p > 0.45 && p < 0.86) {
+        hp.eaten = true; hp.mesh.visible = false;
+        this.effects?.burst({ x: f.x, y: f.y + h * 0.85, z: f.z }, { n: 16, speed: 1.6, color: [0.95, 0.5, 0.15], size: 0.06, life: 0.8, grav: 1.4 });
+        this.audio?.play?.('grunt', { x: f.x, y: f.y + 1.4, z: f.z }, { pitch: 0.8 });
+      }
+      if (hp.eaten && p >= 0.9) hp.mesh.visible = true; // back in the ring, food's back in hand
+      // hold it up near the mouth/hand
+      hp.mesh.position.set(f.x + fw.x * 0.28, f.y + h * 0.72, f.z + fw.z * 0.28);
+    } else {
+      // cigarette at the mouth, occasional smoke puff
+      hp.mesh.position.set(f.x + fw.x * 0.22, f.y + h * 0.86, f.z + fw.z * 0.22);
+      hp.mesh.rotation.y = f.yaw;
+      if (Math.random() < 0.06) this.effects?.burst({ x: f.x + fw.x * 0.3, y: f.y + h * 0.9, z: f.z + fw.z * 0.3 }, { n: 3, speed: 0.4, color: [0.7, 0.7, 0.72], size: 0.07, life: 1.3, additive: false, grav: -0.4, up: 1.2 });
+    }
+  }
+
   /**
    * Flames jetting up the SIDES of the walkway as the wrestler walks out –
    * a line of fire either side of the aisle, erupting around where they are.
@@ -215,20 +277,27 @@ export class EntranceDirector {
     if (!this.effects) return;
     if (p < 0.08 || p > 0.92) return;              // only while they're on the stage/aisle
     this._sideFireT = (this._sideFireT || 0) + dt;
-    if (this._sideFireT < 0.07) return;            // pulse ~14x/sec
+    if (this._sideFireT < 0.05) return;            // pulse ~20x/sec for a continuous blaze
     this._sideFireT = 0;
     const halfX = ARENA.entrance.halfX + 0.35;     // just outside the aisle edges
     const wz = f.z;                                // flames bracket the walker
-    const zs = [wz + 1.4, wz, wz - 1.4];
+    const zs = [wz + 2.0, wz + 0.9, wz, wz - 0.9, wz - 2.0];  // a longer line of fire down the aisle
+    const flick = 0.8 + Math.random() * 0.6;       // flicker the intensity
     for (const s of [-1, 1]) {
       for (const z of zs) {
         if (z < ARENA.ring.apronHalf - 0.5) continue; // don't spew fire inside the ring
         const base = { x: s * halfX, y: 0.1, z };
-        this.effects.burst(base, { n: 10, speed: 1.4, color: [1, 0.5 + Math.random() * 0.35, 0.08], size: 0.18, life: 0.55, additive: true, grav: -3.4, up: 6.5 });
-        this.effects.burst(base, { n: 4, speed: 0.8, color: [0.25, 0.22, 0.2], size: 0.22, life: 0.9, additive: false, grav: -0.6, up: 2.2 }); // smoke
+        // tall roaring body – deep orange, rising fast (realistic jet of flame)
+        this.effects.burst(base, { n: 16, speed: 1.6, color: [1, 0.42 + Math.random() * 0.3, 0.05], size: 0.22 * flick, life: 0.7, additive: true, grav: -4.2, up: 9 * flick });
+        // bright yellow-white core at the base
+        this.effects.burst({ x: base.x, y: 0.1, z }, { n: 8, speed: 1.1, color: [1, 0.9, 0.5], size: 0.14, life: 0.4, additive: true, grav: -3.0, up: 6 });
+        // dark smoke curling up above the flame
+        this.effects.burst({ x: base.x, y: 0.6, z }, { n: 5, speed: 0.7, color: [0.18, 0.16, 0.15], size: 0.3, life: 1.2, additive: false, grav: -0.5, up: 2.6 });
+        // orange embers drifting
+        if (Math.random() < 0.5) this.effects.burst({ x: base.x, y: 0.4, z }, { n: 3, speed: 2.2, color: [1, 0.6, 0.2], size: 0.05, life: 1.1, additive: true, grav: -1.2, up: 4 });
       }
     }
-    if (Math.random() < 0.12) this.audio.play?.('whoosh', { x: 0, y: 0.5, z: wz }, { volume: 0.5 });
+    if (Math.random() < 0.18) this.audio.play?.('whoosh', { x: 0, y: 0.5, z: wz }, { volume: 0.6 });
   }
 
   /** Fire jets (pyro) at the ring + stage – replaces confetti for entrances. */
@@ -393,6 +462,7 @@ export class EntranceDirector {
     if (!this.active && !this._song && !this.video && !this._winner) return;
     this.active = false; this._winner = null;
     this.screens.suspended = false;
+    this.clearHandProp();
     this._mediaFor = null; this._announced = false; this._coatThrown = false; this._firedEntry = false; this._shot = -1;
     if (this._swapped != null && this.assets) { const v = this.views.get(this._swapped); if (v) v.swapModel(this.assets, v.charId); this._swapped = null; }
     for (const p of this._props) { try { this.scene.remove(p.mesh); p.mesh.geometry.dispose?.(); p.mesh.material.dispose?.(); } catch { /* ignore */ } }

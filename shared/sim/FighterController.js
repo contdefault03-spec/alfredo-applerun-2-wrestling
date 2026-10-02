@@ -186,8 +186,7 @@ export class FighterController {
         f.vx = f.vz = 0; f.vy = 0;
         if (tgt) turnToward(f, angleTo(f, tgt.x, tgt.z), 6 * dt);
         if (pressed & (BTN.PUNCH | BTN.KICK | BTN.JUMP)) this.startDive(f, tgt);
-        else if ((pressed & BTN.INTERACT) && (f.input.held & BTN.RUN)) this.startRafterClimb(f); // keep climbing – up to the rafters
-        else if (pressed & BTN.INTERACT) this.startClimb(f, 'down_corner');
+        else if (pressed & BTN.INTERACT) this.startClimb(f, 'down_corner'); // the overhead drop is now reached via the stands zipline, not the turnbuckle
         break;
       case S.RAFTER_CLIMB: this.rafterClimbUpdate(f, dt); break;
       case S.RAFTER: this.rafterUpdate(f, dt); break;
@@ -355,6 +354,8 @@ export class FighterController {
     } else if (f.zone === ZONE.FLOOR) {
       if (w.rules.cage && a.cageWallDist(f.x, f.z) < 0.9 + f.c.radius) { this.startCageClimb(f); return true; }
       if (!f.outside && a.apronEdgeDist(f.x, f.z) < 0.9 + f.c.radius) { this.startClimb(f, 'in'); return true; }
+      // zipline platform in the back stands: vault out, reach the back, ride it up over the ring
+      if (!w.rules.cage && f.outside && Math.abs(f.x) < 3.2 && f.z < -(ARENA.barricade.halfZ - 0.1)) { this.startRafterClimb(f); return true; }
       if (!w.rules.cage && this.nearBarricade(f)) { this.startVault(f); return true; }
     }
     return false;

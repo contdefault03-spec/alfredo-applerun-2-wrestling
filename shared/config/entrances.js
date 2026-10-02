@@ -47,12 +47,12 @@ export const ENTRANCES = {
   ajan: {
     country: 'ALBANIA', weight: 573,   // the Silverback – billed heaviest by far
     video: 'assets/entrances/ajanent.mp4', song: 'assets/entrances/ajansong.mp3', duration: 13.2,
-    stomps: true, shake: true, flourish: 'stomp',
+    stomps: true, shake: true, flourish: 'stomp', eatFood: true,
   },
   rise: {
     country: 'SPAIN', weight: 228,
     video: 'assets/entrances/rizeent.mp4', song: 'assets/entrances/rizesong.mp3', duration: 9.6,
-    confident: true, victoryCigarette: true, flourish: 'strut',
+    confident: true, victoryCigarette: true, flourish: 'strut', cigarette: true,
   },
   cave: {
     country: 'DENMARK', weight: 240,
