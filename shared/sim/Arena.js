@@ -96,8 +96,15 @@ export class Arena {
       }
       if (this.cage) {
         const C = ARENA.cage.half - r;
+        const doorHalf = ARENA.cage.doorHalf ?? 1.0;
         if (Math.abs(e.x) > C) { const s = Math.sign(e.x); hit('cage', -s, 0); e.x = s * C; if (Math.sign(e.vx) === s) e.vx = 0; }
-        if (Math.abs(e.z) > C) { const s = Math.sign(e.z); hit('cage', 0, -s); e.z = s * C; if (Math.sign(e.vz) === s) e.vz = 0; }
+        const atDoor = this.cageDoorBroken && Math.abs(e.x) < doorHalf;
+        if (e.z > C && !atDoor) { hit('cage', 0, -1); e.z = C; if (e.vz > 0) e.vz = 0; }         // +Z wall (door side)
+        else if (e.z < -C) { hit('cage', 0, 1); e.z = -C; if (e.vz < 0) e.vz = 0; }              // -Z wall
+        if (atDoor && e.z > C) {                                                                  // walked out the broken door
+          const outZ = ARENA.entrance.zEnd - r;
+          if (e.z > outZ) { e.z = outZ; if (e.vz > 0) e.vz = 0; }
+        }
       } else {
         const B = ARENA.barricade, E = ARENA.entrance, St = ARENA.stands;
         const bx = B.halfX - r, bz = B.halfZ - r, wx = Math.min(E.halfX, B.gapHalf) - r;

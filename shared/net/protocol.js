@@ -69,6 +69,7 @@ export function snapshot(world, events, ack = {}) {
     r: encodeReferee(world.match.referee),
     m: encodeMatch(world.match),
     rd: world.ring.encode(),
+    cd: world.arena.cageDoorBroken ? 1 : 0,
     ev: events.filter((e) => !PRIVATE_EVENTS.has(e.type)),
     ack,
   };

@@ -510,8 +510,19 @@ export class ArenaView {
     const mat = new THREE.MeshStandardMaterial({ map: link, alphaMap: null, transparent: false, alphaTest: 0.45, side: THREE.DoubleSide, metalness: 0.85, roughness: 0.35, color: 0x9da3aa });
     const wallGeo = new THREE.PlaneGeometry(C.half * 2, C.height);
     for (let i = 0; i < 4; i++) {
-      const w = new THREE.Mesh(wallGeo, mat);
       const a = i * Math.PI / 2;
+      if (i === 0) { // +Z wall: two side panels leaving a door gap, plus a door panel
+        const dh = C.doorHalf ?? 1.0, side = C.half - dh;
+        for (const sx of [-1, 1]) {
+          const panel = new THREE.Mesh(new THREE.PlaneGeometry(side, C.height), mat);
+          panel.position.set(sx * (dh + side / 2), C.height / 2, C.half); panel.castShadow = true; g.add(panel);
+        }
+        const door = new THREE.Mesh(new THREE.PlaneGeometry(dh * 2, C.height * 0.74), mat.clone());
+        door.position.set(0, C.height * 0.37, C.half); door.castShadow = true; door.name = 'cagedoor';
+        g.add(door); this.cageDoorMesh = door;
+        continue;
+      }
+      const w = new THREE.Mesh(wallGeo, mat);
       w.position.set(Math.sin(a) * C.half, C.height / 2, Math.cos(a) * C.half);
       w.rotation.y = a;
       w.castShadow = true;
@@ -532,6 +543,14 @@ export class ArenaView {
     const fm = new THREE.Mesh(mergeGeometries(beams), frameMat); fm.castShadow = true; g.add(fm);
     this.group.add(g);
     this.cage = g;
+  }
+
+  /** Open/close the Hell-in-a-Cell door (broken = swung open and knocked loose). */
+  setCageDoor(broken) {
+    const d = this.cageDoorMesh; if (!d) return;
+    if (broken && d.visible) { d.rotation.y = -1.2; d.position.x = -(ARENA.cage.doorHalf ?? 1.0) + 0.1; d.material.opacity = 0.9; } // swung open
+    else if (!broken && d.rotation.y !== 0) { d.rotation.y = 0; d.position.x = 0; }
+    d.visible = true;
   }
 
   setMode(rules) {

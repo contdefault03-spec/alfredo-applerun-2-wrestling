@@ -579,6 +579,11 @@ export class FighterController {
       const dmg = contact.kind === 'cage' ? 55 : contact.kind === 'desk' ? 50 : 40;
       w.combat.applyEnvDamage(f, dmg, contact.kind);
       w.emit(contact.kind + '_hit', { fighter: f.id, pos: { x: f.x, y: f.y + 1, z: f.z }, speed });
+      // thrown/whipped into the cell door (the +Z wall) → it breaks open
+      if (contact.kind === 'cage' && !w.arena.cageDoorBroken && contact.nz < 0 && Math.abs(f.x) < (ARENA.cage.doorHalf ?? 1.0)) {
+        w.arena.cageDoorBroken = true;
+        w.emit('cage_door_break', { fighter: f.id, pos: { x: f.x, y: f.y + 1, z: f.z } });
+      }
       if (f.state !== S.AIRBORNE) w.combat.knockDown(f, contact.nx * 1.5, 2, contact.nz * 1.5);
       else { f.vx = contact.nx * 1.5; f.vz = contact.nz * 1.5; }
     }

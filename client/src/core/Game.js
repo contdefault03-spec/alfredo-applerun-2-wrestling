@@ -419,6 +419,7 @@ export class Game {
     this.referee.update(dt, view.referee);
     this.arena.updateRopes(dt, view.fighters);
     this.arena.updateRingDamage(view.ring);
+    this.arena.setCageDoor(view.cageDoor);
     const diver = view.fighters.find((f) => f.state === S.RAFTER || f.state === S.RAFTER_DROP);
     this.arena.showDropShadow(diver?.x || 0, diver?.z || 0, !!diver);
     const events = this.session.takeEvents();

@@ -22,7 +22,7 @@ export const ARENA = {
   entrance: { halfX: 1.7, zEnd: 15.5 }, // walkway from barricade gap to the tunnel
   desk: { x: 0, z: -6.7, halfX: 1.8, halfZ: 0.45, height: 0.8 },  // commentary desk
 
-  cage: { half: 6.4, height: 6.2, climbMax: 4.2 }, // Hell-in-a-Cell style structure
+  cage: { half: 6.4, height: 6.2, climbMax: 4.2, doorHalf: 1.0 }, // Hell-in-a-Cell; door on the +Z wall
 
   stands: { innerX: 10.2, innerZ: 9.4, rows: 11, rowDepth: 0.95, rowRise: 0.48 },
 
