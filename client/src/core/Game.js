@@ -46,6 +46,7 @@ export class Game {
     this.session = null;
     this.views = new Map();
     this.gorePieces = [];
+    this.bloodDecals = [];
     this.inputState = { mx: 0, mz: 0, held: 0, pressed: 0 };
     this.lastT = performance.now();
     this.time = 0;
@@ -688,23 +689,42 @@ export class Game {
     for (const g of this.ringGirls) g.visible = show;
   }
 
-  /** Cartoonish KO gore: a spray of blood + a couple of limbs flung off. */
+  /** A red blood splat that stays on the ground (or any surface). */
+  bloodDecal(x, z, size = 1, y = 0.02) {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(size * (0.4 + Math.random() * 0.3), 12).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x6e0208, transparent: true, opacity: 0.85, depthWrite: false }));
+    m.position.set(x + (Math.random() - 0.5) * 0.3, y, z + (Math.random() - 0.5) * 0.3);
+    m.rotation.y = Math.random() * Math.PI; m.renderOrder = 1;
+    this.scene.add(m); this.bloodDecals.push(m);
+    if (this.bloodDecals.length > 80) { const old = this.bloodDecals.shift(); this.scene.remove(old); old.geometry.dispose?.(); old.material.dispose?.(); }
+  }
+
+  /** KO gore: blood that splatters + stays, and an actual limb torn off the body. */
   spawnGore(f) {
     if (!f || this.settings.get().gore === false) return;
     const x = f.x, y = (f.y || 0), z = f.z;
-    // exaggerated blood spray
-    for (let i = 0; i < 4; i++) {
-      this.effects.burst({ x, y: y + 0.5 + Math.random() * 0.9, z }, { n: 34, speed: 3 + i, color: [0.72, 0.02, 0.04], size: 0.13, life: 1.0, additive: false, grav: 2.4, up: 2.5 });
+    for (let i = 0; i < 5; i++) {
+      this.effects.burst({ x, y: y + 0.4 + Math.random() * 1.0, z }, { n: 40, speed: 3 + i, color: [0.72, 0.02, 0.04], size: 0.14, life: 1.1, additive: false, grav: 2.4, up: 2.6 });
     }
-    // flung limbs (generic skin-tone, stylised)
-    const geos = [new THREE.CapsuleGeometry(0.1, 0.46, 4, 8), new THREE.CapsuleGeometry(0.12, 0.55, 4, 8), new THREE.SphereGeometry(0.19, 10, 8)];
-    const n = 2 + (Math.random() < 0.5 ? 1 : 0);
-    for (let i = 0; i < n; i++) {
-      const m = new THREE.Mesh(geos[i % geos.length], new THREE.MeshStandardMaterial({ color: 0xd8a97a, roughness: 0.85 }));
-      m.position.set(x, y + 0.7 + Math.random() * 0.8, z); m.castShadow = false;
-      this.scene.add(m);
-      const a = Math.random() * Math.PI * 2, sp = 2.5 + Math.random() * 2.5;
-      this.gorePieces.push({ mesh: m, vx: Math.cos(a) * sp, vy: 4.5 + Math.random() * 2.5, vz: Math.sin(a) * sp, spin: (Math.random() - 0.5) * 16, life: 3.2 });
+    this.bloodDecal(x, z, 1.3); this.bloodDecal(x, z, 0.9);
+    // tear an actual limb off the model (shrinks that bone, like Ajan's eaten food)
+    const fv = this.views.get(f.id);
+    if (fv?.inst?.bones) {
+      fv._severed = fv._severed || {};
+      const choices = ['lowerArm_R', 'lowerArm_L', 'lowerLeg_R', 'lowerLeg_L', 'head'];
+      const avail = choices.filter((n) => fv.inst.bones[n] && !fv._severed[n]);
+      if (avail.length) {
+        const name = avail[Math.floor(Math.random() * avail.length)];
+        const bone = fv.inst.bones[name];
+        const wpos = bone.getWorldPosition(new THREE.Vector3());
+        bone.scale.setScalar(0.0001); fv._severed[name] = true;           // limb gone from the body
+        const isHead = name === 'head';
+        const geo = isHead ? new THREE.SphereGeometry(0.2, 10, 8) : new THREE.CapsuleGeometry(0.1, 0.46, 4, 8);
+        const piece = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xd8a97a, roughness: 0.85 }));
+        piece.position.copy(wpos); this.scene.add(piece);
+        const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 2.5;
+        this.gorePieces.push({ mesh: piece, vx: Math.cos(a) * sp, vy: 3.5 + Math.random() * 2.5, vz: Math.sin(a) * sp, spin: (Math.random() - 0.5) * 14, landed: false });
+      }
     }
     this.audio.crowdBoo?.(0.5);
   }
@@ -712,21 +732,19 @@ export class Game {
   updateGore(dt) {
     if (!this.gorePieces.length) return;
     for (const g of this.gorePieces) {
-      g.life -= dt; g.vy -= 15 * dt;
+      if (g.landed) continue;                 // rests on the ground (stays for the match)
+      g.vy -= 15 * dt;
       g.mesh.position.x += g.vx * dt; g.mesh.position.y += g.vy * dt; g.mesh.position.z += g.vz * dt;
       g.mesh.rotation.x += g.spin * dt; g.mesh.rotation.y += g.spin * 0.7 * dt;
-      if (g.mesh.position.y < 0.1) { g.mesh.position.y = 0.1; g.vy = Math.abs(g.vy) * 0.3; g.vx *= 0.6; g.vz *= 0.6; } // bounce + blood pool
+      if (g.mesh.position.y <= 0.12) { g.mesh.position.y = 0.12; g.landed = true; this.bloodDecal(g.mesh.position.x, g.mesh.position.z, 0.5); }
     }
-    this.gorePieces = this.gorePieces.filter((g) => {
-      if (g.life > 0) return true;
-      this.scene.remove(g.mesh); g.mesh.geometry.dispose?.(); g.mesh.material.dispose?.();
-      return false;
-    });
   }
 
   clearGore() {
     for (const g of this.gorePieces) { try { this.scene.remove(g.mesh); g.mesh.geometry.dispose?.(); g.mesh.material.dispose?.(); } catch { /* ignore */ } }
     this.gorePieces = [];
+    for (const d of this.bloodDecals) { try { this.scene.remove(d); d.geometry.dispose?.(); d.material.dispose?.(); } catch { /* ignore */ } }
+    this.bloodDecals = [];
   }
 
   /** Winner moment: confetti, pyro from the ring posts, announcer declares the winner. */
