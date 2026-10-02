@@ -81,6 +81,7 @@ export class EntranceDirector {
       f._entranceHidden = false;
       if (pos < en.index) continue;                                // already in the ring
       this.placeWalk(f, en.p, dt);                                 // the current entrant
+      this.sideFire(f, en.p, dt);                                  // flames up the sides of the aisle
     }
   }
 
@@ -197,6 +198,30 @@ export class EntranceDirector {
     cam.lookAt(this._look);
     if (this.camera.pos) this.camera.pos.copy(cam.position);
     if (this.camera.focus) this.camera.focus.copy(this._look);
+  }
+
+  /**
+   * Flames jetting up the SIDES of the walkway as the wrestler walks out –
+   * a line of fire either side of the aisle, erupting around where they are.
+   */
+  sideFire(f, p, dt) {
+    if (!this.effects) return;
+    if (p < 0.08 || p > 0.92) return;              // only while they're on the stage/aisle
+    this._sideFireT = (this._sideFireT || 0) + dt;
+    if (this._sideFireT < 0.07) return;            // pulse ~14x/sec
+    this._sideFireT = 0;
+    const halfX = ARENA.entrance.halfX + 0.35;     // just outside the aisle edges
+    const wz = f.z;                                // flames bracket the walker
+    const zs = [wz + 1.4, wz, wz - 1.4];
+    for (const s of [-1, 1]) {
+      for (const z of zs) {
+        if (z < ARENA.ring.apronHalf - 0.5) continue; // don't spew fire inside the ring
+        const base = { x: s * halfX, y: 0.1, z };
+        this.effects.burst(base, { n: 10, speed: 1.4, color: [1, 0.5 + Math.random() * 0.35, 0.08], size: 0.18, life: 0.55, additive: true, grav: -3.4, up: 6.5 });
+        this.effects.burst(base, { n: 4, speed: 0.8, color: [0.25, 0.22, 0.2], size: 0.22, life: 0.9, additive: false, grav: -0.6, up: 2.2 }); // smoke
+      }
+    }
+    if (Math.random() < 0.12) this.audio.play?.('whoosh', { x: 0, y: 0.5, z: wz }, { volume: 0.5 });
   }
 
   /** Fire jets (pyro) at the ring + stage – replaces confetti for entrances. */
