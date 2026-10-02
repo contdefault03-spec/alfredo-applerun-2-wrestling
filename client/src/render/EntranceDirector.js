@@ -20,20 +20,38 @@ const STAGE_Z = ARENA.entrance.zEnd + 2;      // where the wrestler appears on t
 const APPROACH_Z = ARENA.ring.apronHalf + 1.1; // ring-side, just before climbing in
 
 export class EntranceDirector {
-  constructor({ scene, camera, audio, arena, screens, commentary, ui, views }) {
+  constructor({ scene, camera, audio, arena, screens, commentary, ui, views, effects = null }) {
     this.scene = scene; this.camera = camera; this.audio = audio; this.arena = arena;
     this.screens = screens; this.commentary = commentary; this.ui = ui; this.views = views;
+    this.effects = effects;
     this.t = 0;
     this.active = false;
     this._mediaFor = null;      // fighter id whose media is playing
     this._announced = false;
     this._coatThrown = false;   // Max's coat/hat/glasses toss done this entrance
+    this._firedEntry = false;   // ring-entry pyro done
     this._props = [];           // flying entrance props (coat etc.)
     this._song = null;
     this.video = null;
+    this._shot = -1;
+    this._look = new THREE.Vector3();
+    this._camTarget = new THREE.Vector3();
     this.getSession = null;     // set by Game: () => current session
     this.getNet = null;         // set by Game: () => net client (online)
   }
+
+  // Cinematic shot list – each returns {pos,look} for the current entrant E.
+  // Hard cuts between shots give the broadcast feel.
+  static SHOTS = [
+    { end: 0.10, cam: (E, SZ) => ({ pos: [7, 3.2, SZ + 5], look: [0, 2.2, SZ - 1] }) },          // wide reveal at the tunnel
+    { end: 0.20, cam: (E) => ({ pos: [-9, 6, 2], look: [-12.5, 7, 8] }) },                         // crowd cutaway
+    { end: 0.32, cam: (E) => ({ pos: [E.x - 1.7, E.y + 1.75, E.z - 1.6], look: [E.x, E.y + 1.55, E.z] }) }, // close-up, smiling
+    { end: 0.46, cam: (E) => ({ pos: [E.x + 4.5, E.y + 1.8, E.z + 0.4], look: [E.x, E.y + 1.3, E.z] }) }, // side tracking walk
+    { end: 0.56, cam: () => ({ pos: [0, 15, -17], look: [0, 1, 3] }) },                            // whole stadium
+    { end: 0.66, cam: (E, SZ) => ({ pos: [0, 6.8, SZ - 3.5], look: [0, 7.4, SZ + 5.4] }) },        // the titantron (video)
+    { end: 0.80, cam: (E) => ({ pos: [E.x - Math.sin(E.yaw) * 4.5, E.y + 2.6, E.z - Math.cos(E.yaw) * 4.5], look: [E.x, E.y + 1.3, E.z] }) }, // behind, toward the ring
+    { end: 1.01, cam: () => ({ pos: [4.6, 3.2, -5.6], look: [0, ARENA.ring.height + 1.2, 0] }) },  // ring hero shot
+  ];
 
   /** Normalised entrance state from either session view, or null when not entering. */
   resolve(view) {
@@ -80,9 +98,15 @@ export class EntranceDirector {
       x = spawnX; z = spawnZ; y = ringH;
     }
     f.x = x; f.y = y; f.z = z; f.yaw = Math.atan2(-x, -z);
-    f.state = walking ? 'move' : 'idle';
-    f.runTime = (f.runTime || 0) + (walking ? dt : 0);
-    f.vx = 0; f.vz = 0;
+    if (walking) {
+      // fake forward velocity so the Animator actually plays the walk cycle
+      const spd = (f.c?.walkSpeed || 2.6);
+      f.state = 'move'; f.vx = Math.sin(f.yaw) * spd; f.vz = Math.cos(f.yaw) * spd;
+      f.runTime = (f.runTime || 0) + dt;
+    } else {
+      // on the stage and in the ring: play to the crowd (taunt = signs/gestures)
+      f.state = 'taunt'; f.vx = 0; f.vz = 0;
+    }
   }
 
   /** Drive media, camera, announcer and skip UI for the frame. */
@@ -96,7 +120,7 @@ export class EntranceDirector {
     const charId = f?.charId;
     if (en.fighterId != null && en.fighterId !== this._mediaFor) {
       this.startMedia(charId);
-      this._mediaFor = en.fighterId; this._announced = false; this._coatThrown = false;
+      this._mediaFor = en.fighterId; this._announced = false; this._coatThrown = false; this._firedEntry = false; this._shot = -1;
     }
     this.drawTron(charId, en);
 
@@ -107,21 +131,58 @@ export class EntranceDirector {
     }
     this.updateProps(dt);
 
-    // ring announcer introduces the wrestler as they reach the ring
-    if (!this._announced && en.p > 0.8 && charId) {
+    // ring announcer introduces the wrestler as they reach the ring + pyro
+    if (!this._announced && en.p > 0.82 && charId) {
       this._announced = true;
       this.commentary.announce(entranceIntroLine(charId));
-      this.audio.crowdPop?.(1.2);
+      this.audio.crowdPop?.(1.3);
     }
+    if (!this._firedEntry && en.p > 0.86) { this._firedEntry = true; this.pyro(); }
 
-    // camera: frame the entrant, drifting the angle for variety + a hero shot at the ring
-    if (f) {
-      const ang = 0.55 + Math.sin(this.t * 0.35) * 0.45 + (en.p > 0.8 ? 0.7 : 0);
-      this.camera.update(dt, { menu: { kind: 'showcase', subject: { x: f.x, y: f.y, z: f.z, height: f.c?.height || 1.9 }, angle: ang } });
-    }
+    // multi-angle cinematic camera with hard cuts
+    this.cinematicCamera(dt, en, f);
 
     // skip prompt + vote tally
     this.ui.prompt?.([{ key: 'J', text: `SKIP ENTRANCE   (votes ${en.votes}/${Math.max(1, en.need)})`, hot: true }]);
+  }
+
+  cinematicCamera(dt, en, f) {
+    const SZ = STAGE_Z;
+    const E = f ? { x: f.x, y: f.y, z: f.z, yaw: f.yaw } : { x: 0, y: 0, z: SZ, yaw: 0 };
+    const shots = EntranceDirector.SHOTS;
+    let idx = shots.findIndex((s) => en.p < s.end);
+    if (idx < 0) idx = shots.length - 1;
+    const tgt = shots[idx].cam(E, SZ);
+    const cam = this.camera?.cam;
+    if (!cam) return;
+    const tp = this._camTarget.set(tgt.pos[0], tgt.pos[1], tgt.pos[2]);
+    const tl = new THREE.Vector3(tgt.look[0], tgt.look[1], tgt.look[2]);
+    if (idx !== this._shot) {            // hard cut
+      this._shot = idx;
+      cam.position.copy(tp); this._look.copy(tl);
+    } else {                             // gentle drift within a shot
+      cam.position.lerp(tp, Math.min(1, dt * 2.2));
+      this._look.lerp(tl, Math.min(1, dt * 5));
+    }
+    cam.lookAt(this._look);
+    // keep CameraSystem roughly in sync for a smooth hand-off to gameplay
+    if (this.camera.pos) this.camera.pos.copy(cam.position);
+    if (this.camera.focus) this.camera.focus.copy(this._look);
+  }
+
+  /** Fire jets (pyro) at the ring + stage – replaces confetti for entrances. */
+  pyro() {
+    if (!this.effects) { this.audio.crowdPop?.(0.8); return; }
+    const R = ARENA.ring;
+    const corners = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
+    corners.forEach(([sx, sz], i) => setTimeout(() => {
+      const p = new THREE.Vector3(sx * R.postInset, R.height + R.postHeight, sz * R.postInset);
+      for (let k = 0; k < 5; k++) {
+        this.effects.burst(p, { n: 26, speed: 3 + k, color: [1, 0.55 + Math.random() * 0.3, 0.1], size: 0.14, life: 0.8, grav: -2.2, up: 7 });
+      }
+      this.audio.play?.('whoosh', p, { volume: 1.2 });
+    }, i * 90));
+    this.audio.crowdPop?.(1.1);
   }
 
   /** Max tears off his coat, hat and glasses and hurls them to the crowd. */
@@ -223,7 +284,7 @@ export class EntranceDirector {
     if (!this.active && !this._song && !this.video) return;
     this.active = false;
     this.screens.suspended = false;
-    this._mediaFor = null; this._announced = false; this._coatThrown = false;
+    this._mediaFor = null; this._announced = false; this._coatThrown = false; this._firedEntry = false; this._shot = -1;
     for (const p of this._props) { try { this.scene.remove(p.mesh); p.mesh.geometry.dispose?.(); p.mesh.material.dispose?.(); } catch { /* ignore */ } }
     this._props = [];
     try { this._song?.stop?.(); } catch { /* ignore */ }

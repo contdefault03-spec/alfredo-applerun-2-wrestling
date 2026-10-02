@@ -82,7 +82,7 @@ export class Game {
     this.screens = new ScreenDirector(this.arena);
     this.entranceDir = new EntranceDirector({
       scene: this.scene, camera: this.camera, audio: this.audio, arena: this.arena,
-      screens: this.screens, commentary: this.commentary, ui: this.ui, views: this.views,
+      screens: this.screens, commentary: this.commentary, ui: this.ui, views: this.views, effects: this.effects,
     });
     this.entranceDir.getSession = () => this.session;
     this.entranceDir.getNet = () => this.net;
