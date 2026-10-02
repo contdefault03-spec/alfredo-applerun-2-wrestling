@@ -19,6 +19,9 @@ export const S = {
   CLIMB: 'climb',            // climbing into ring / onto turnbuckle / out
   PERCH: 'perch',            // standing on a turnbuckle
   CAGE_CLIMB: 'cageclimb',
+  RAFTER_CLIMB: 'rafterclimb', // climbing a corner post up to the rafters
+  RAFTER: 'rafter',            // up in the rafters, over the ring
+  RAFTER_DROP: 'rafterdrop',   // falling from the rafters
   DIVE: 'dive',
   SPECIAL: 'special',
   PIN: 'pin', PINNED: 'pinned',
@@ -58,5 +61,15 @@ export const REF_HEAT_WINDOW = 3.5;    // seconds; ground-attack heat decays aft
 export const REF_WARN_TIME = 2.8;      // how long the ref keeps warning
 export const REF_DOWN_TIME = 5;        // seconds the ref is down after being grabbed
 export const REF_GRAB_RANGE = 2.0;     // how close a wrestler must be to grab the ref
+
+// High-risk arena traversal: climb a corner post up to the rafters, move out
+// over the ring, then drop for a devastating, ring-breaking impact.
+export const RAFTER_Y = 7.2;           // rafter height above the floor
+export const RAFTER_SPEED = 2.4;       // horizontal move speed up in the rafters
+export const RAFTER_REACH = 3.0;       // |x|/|z| a wrestler may travel out over the ring
+export const HIGH_DROP_DUR = 0.72;     // fall time from the rafters
+export const HIGH_DROP_RADIUS = 2.3;   // impact radius on landing
+export const HIGH_DROP_DAMAGE = 320;   // damage at the centre of the impact
+export const HIGH_DROP_SELF = 60;      // self-damage if the drop hits nobody
 
 export const ZONE = { RING: 'ring', FLOOR: 'floor', APRON: 'apron' };

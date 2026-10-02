@@ -414,6 +414,8 @@ export class Game {
     this.referee.update(dt, view.referee);
     this.arena.updateRopes(dt, view.fighters);
     this.arena.updateRingDamage(view.ring);
+    const diver = view.fighters.find((f) => f.state === S.RAFTER || f.state === S.RAFTER_DROP);
+    this.arena.showDropShadow(diver?.x || 0, diver?.z || 0, !!diver);
     const events = this.session.takeEvents();
     this.processEvents(events, byId, view);
     if (!this.session.online) this.commentary.update(dt, events);
@@ -461,7 +463,9 @@ export class Game {
     if (st === S.DOWN || st === S.KNOCKDOWN) return [{ key: 'MASH', text: 'to get up faster' }];
     if (st === S.CORNER_STUN) return [{ key: 'MASH', text: 'to recover' }];
     if (st === S.HOLD) return [{ key: 'J', text: 'Strike' }, { key: 'K', text: 'Slam (S+K: suplex)' }, { key: 'E', text: 'Throw / Irish whip' }, ...(ab?.kind === 'grapple' ? [{ key: 'X', text: ab.name, hot: me.meter >= me.c.specialCost && me.specialCd <= 0 }] : [])];
-    if (st === S.PERCH) return [{ key: 'J / K', text: 'DIVE!', hot: true }, { key: 'F', text: 'Climb down' }];
+    if (st === S.PERCH) return [{ key: 'J / K', text: 'DIVE!', hot: true }, { key: 'SHIFT + F', text: 'Climb to the rafters' }, { key: 'F', text: 'Climb down' }];
+    if (st === S.RAFTER) return [{ key: 'WASD', text: 'Move out over the ring' }, { key: 'F / J', text: 'HIGH DROP!', hot: true }];
+    if (st === S.RAFTER_CLIMB || st === S.RAFTER_DROP) return [];
     if (st === S.CAGE_CLIMB) return [{ key: 'W / S', text: 'Climb' }, { key: 'J', text: 'Dive off!', hot: me.y > 1.2 }, { key: 'F', text: 'Drop' }];
     if (me.itemType) out.push({ key: 'J', text: 'Swing' }, { key: 'K', text: 'Smash' }, { key: 'G', text: 'Throw' }, { key: 'F', text: 'Drop' });
     else {
@@ -484,12 +488,17 @@ export class Game {
           if (!out.length && cd < R.cornerZone + 0.2) out.push({ key: 'F', text: 'Climb turnbuckle' });
           else if (!out.length && gap < 0.9) out.push({ key: 'F', text: 'Roll out of ring' });
         } else if (me.zone === 'floor') {
-          const R = ARENA.ring;
+          const R = ARENA.ring, B = ARENA.barricade, reach = 1.0 + me.c.radius;
           if (view.rules.cage && ARENA.cage.half - Math.max(Math.abs(me.x), Math.abs(me.z)) < 0.9 + me.c.radius) out.push({ key: 'F', text: 'Climb the cell' });
-          else {
+          else if (me.outside) {
+            if (Math.abs(me.x) < B.halfX + reach && Math.abs(me.z) < B.halfZ + reach) out.push({ key: 'F', text: 'Vault back over', hot: true });
+          } else {
             const dx = Math.abs(me.x) - R.apronHalf, dz = Math.abs(me.z) - R.apronHalf;
             const d = dx > 0 && dz > 0 ? Math.hypot(dx, dz) : Math.max(dx, dz);
             if (d < 0.9 + me.c.radius) out.push({ key: 'F', text: 'Enter ring' });
+            const nearBar = (B.halfX - Math.abs(me.x) < reach || B.halfZ - Math.abs(me.z) < reach)
+              && !(me.z > B.halfZ - reach && Math.abs(me.x) < B.gapHalf);
+            if (nearBar) out.push({ key: 'F', text: 'Vault the barricade' });
           }
         }
       }

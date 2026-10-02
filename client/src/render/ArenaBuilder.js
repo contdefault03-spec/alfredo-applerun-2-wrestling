@@ -226,6 +226,22 @@ export class ArenaView {
     }
   }
 
+  /** Target shadow on the canvas showing where a rafter diver will land. */
+  showDropShadow(x, z, on) {
+    if (!this._dropShadow) {
+      const g = new THREE.RingGeometry(0.5, 1.3, 28).rotateX(-Math.PI / 2);
+      const m = new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.5, toneMapped: false });
+      this._dropShadow = new THREE.Mesh(g, m); this._dropShadow.visible = false;
+      this._dropShadow.renderOrder = 2; this.group.add(this._dropShadow);
+    }
+    const s = this._dropShadow;
+    s.visible = !!on;
+    if (on) {
+      s.position.set(x, R.height + 0.03, z);
+      s.material.opacity = 0.35 + 0.25 * (0.5 + 0.5 * Math.sin(performance.now() * 0.012)); // pulse
+    }
+  }
+
   /** Update crack/hole overlays from the authoritative hit-count array. */
   updateRingDamage(cells) {
     if (!cells || !this.ringDmgCells) return;

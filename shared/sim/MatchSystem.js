@@ -3,7 +3,8 @@
 // the referee NPC (simulated so every client sees the same count).
 import { ARENA } from '../config/arena.js';
 import { getEntrance } from '../config/entrances.js';
-import { S, ZONE, DOWN_STATES, REF_WARN_HITS, REF_HEAT_WINDOW, REF_WARN_TIME, REF_DOWN_TIME, REF_GRAB_RANGE } from './constants.js';
+import { S, ZONE, DOWN_STATES, REF_WARN_HITS, REF_HEAT_WINDOW, REF_WARN_TIME, REF_DOWN_TIME, REF_GRAB_RANGE,
+  HIGH_DROP_RADIUS, HIGH_DROP_DAMAGE, HIGH_DROP_SELF } from './constants.js';
 import { setState, dist2D, isAlive, hpFrac, angleTo, turnToward } from './Fighter.js';
 
 const R = ARENA.ring;
@@ -332,6 +333,27 @@ export class MatchSystem {
     if (this.pin) this.endPin(false);
     w.emit('bell', { ending: true });
     w.emit('match_end', { winnerTeam: team, winners: this.winners, method, ...detail });
+  }
+
+  /** Resolve a wrestler's drop from the rafters: radius impact + ring damage. */
+  applyHighDrop(f) {
+    const w = this.world;
+    const x = f.x, z = f.z;
+    let hit = 0;
+    for (const v of w.fighters) {
+      if (v === f || v.hidden || v.eliminated || v.state === S.KO) continue;
+      const d = Math.hypot(v.x - x, v.z - z);
+      if (d > HIGH_DROP_RADIUS) continue;
+      const dmg = Math.round(HIGH_DROP_DAMAGE * (1 - 0.5 * (d / HIGH_DROP_RADIUS))); // falloff
+      w.combat.applyHit(f, v, { damage: dmg, reaction: 'knockdown', knockback: 3, unblockable: true, sound: 'impact', move: 'high_drop', moveName: 'High Drop', special: true, crowd: 1 });
+      hit++;
+    }
+    // the ring takes extreme damage where they land (breaks an already-cracked section)
+    if (w.arena.isInsideRingSquare(x, z, -0.2)) { w.ring.registerImpact(x, z); w.ring.registerImpact(x, z); }
+    // the diver: safe-ish on a hit, hurt on a miss
+    setState(f, S.DOWN); f.downTimer = hit ? 1.0 : 1.8; f.mash = 0;
+    if (!hit) w.combat.applyEnvDamage(f, HIGH_DROP_SELF, 'high_drop_miss');
+    w.emit('high_drop', { fighter: f.id, x, z, radius: HIGH_DROP_RADIUS, hits: hit });
   }
 
   // ── referee interference ──
