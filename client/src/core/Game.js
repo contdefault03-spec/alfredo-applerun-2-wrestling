@@ -644,7 +644,7 @@ export class Game {
         case 'ko': ui.banner('K.O.!', name(e.fighter), 2000); C.react('big'); A.crowdPop(1.2); cam.shake(0.5); this.spawnGore(byId.get(e.fighter)); break;
         case 'elimination': ui.feed(`${name(e.fighter)} has been ELIMINATED`); break;
         case 'bell': A.play('ring_bell', new THREE.Vector3(2.6, 1, -6.3), { times: e.ending ? 3 : 2, volume: 1.2 }); break;
-        case 'match_start': ui.banner('FIGHT!', '', 1100); C.react('pop', 0.8); A.crowdPop(1); this.screens.flash('FIGHT!'); break;
+        case 'match_start': ui.banner('FIGHT!', '', 1100); C.react('pop', 0.8); A.crowdPop(1); this.screens.flash('FIGHT!'); if (this.ringGirls) for (const g of this.ringGirls) g.applaud(4); break;
         case 'match_end': {
           const w = (e.winners || []).map(name).join(' & ');
           const meF = byId.get(me);

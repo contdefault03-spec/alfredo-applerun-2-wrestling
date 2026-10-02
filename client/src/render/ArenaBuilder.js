@@ -253,7 +253,7 @@ export class ArenaView {
       const scale = 4.3 / len;                                   // ~4.3 m long
       car.scale.setScalar(scale);
       car.position.set(s.x, -box.min.y * scale, s.z);
-      car.rotation.y = Math.atan2(-s.x, stageZ - s.z);           // face the stage/entrance
+      car.rotation.y = Math.atan2(-s.x, -s.z);                   // face the arena/ring (center)
       car.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
       this.group.add(car);
       // a windshield pane (breakable) sitting on the car, tilted, facing the stage
@@ -503,6 +503,37 @@ export class ArenaView {
     for (const z of [-3, 1.5]) banner(B.halfX - inset, z, -Math.PI / 2);
     // entrance side (z = +halfZ) either side of the walkway gap, face -Z
     for (const x of [-5.2, 5.2]) banner(x, B.halfZ - inset, Math.PI);
+    this.buildWallAds(mats);
+  }
+
+  /** Big sponsor boards high on the far left/right black walls + an overhead light/metal rig. */
+  buildWallAds(mats) {
+    const St = ARENA.stands;
+    const wallX = St.innerX + St.rows * St.rowDepth + 1.5;   // just behind the top of the stands
+    const bigGeo = new THREE.PlaneGeometry(14, 6);
+    // a big board on each side wall, facing inward, up above the crowd
+    const L = add(this.group, bigGeo, mats[0], { cast: false, receive: false, pos: [-wallX, 7.5, 0] }); L.rotation.y = Math.PI / 2;
+    const Rr = add(this.group, bigGeo, mats[1 % mats.length], { cast: false, receive: false, pos: [wallX, 7.5, 0] }); Rr.rotation.y = -Math.PI / 2;
+    // dark backing walls behind the boards so they read on "black walls"
+    const wallMat = std({ color: 0x050507, roughness: 1 });
+    const wallGeo = new THREE.PlaneGeometry(26, 12);
+    const bL = add(this.group, wallGeo, wallMat, { cast: false, pos: [-wallX - 0.1, 7, 0] }); bL.rotation.y = Math.PI / 2;
+    const bR = add(this.group, wallGeo, wallMat, { cast: false, pos: [wallX + 0.1, 7, 0] }); bR.rotation.y = -Math.PI / 2;
+    // overhead metal truss rig + light fixtures
+    const metal = std({ color: 0x1a1c22, roughness: 0.5, metalness: 0.8 });
+    const bulb = new THREE.MeshBasicMaterial({ color: 0xfff4d8, toneMapped: false });
+    const trussY = 12.5;
+    for (const sx of [-1, 1]) {
+      // a truss beam running along each side, up high
+      add(this.group, new THREE.BoxGeometry(0.4, 0.4, 20), metal, { cast: false, pos: [sx * (St.innerX - 0.5), trussY, 0] });
+      // a row of downlight fixtures hung off it
+      for (const z of [-7, -3.5, 0, 3.5, 7]) {
+        add(this.group, new THREE.BoxGeometry(0.5, 0.3, 0.5), metal, { cast: false, pos: [sx * (St.innerX - 0.5), trussY - 0.4, z] });
+        add(this.group, new THREE.CircleGeometry(0.22, 12), bulb, { cast: false, pos: [sx * (St.innerX - 0.5), trussY - 0.62, z] }).rotation.x = -Math.PI / 2;
+      }
+    }
+    // cross beams front/back
+    for (const z of [-9, 9]) add(this.group, new THREE.BoxGeometry(St.innerX * 2, 0.35, 0.35), metal, { cast: false, pos: [0, trussY, z] });
   }
 
   // ── commentary desk ──

@@ -102,11 +102,16 @@ export class EntranceDirector {
       const sway = Math.sin(raw * Math.PI * 3 + (f._spawnX || 0)) * swayAmt * (1 - raw);
       x = spawnX * 0.35 * uu + sway; z = STAGE_Z + (APPROACH_Z - STAGE_Z) * uu; y = 0; walking = true;
       f._lookCrowd = Math.sin(raw * Math.PI * 4) * 0.3; // slight head/body turn toward the crowd
-    } else if (p < 0.9) {           // climb into the ring
-      const u = (p - 0.78) / 0.12; x = spawnX * 0.35 + (spawnX - spawnX * 0.35) * u; z = APPROACH_Z + (spawnZ - APPROACH_Z) * u; y = ringH * u; walking = true;
+    } else if (p < 0.9) {           // climb UP onto the apron, then step in (not a diagonal float)
+      const u = (p - 0.78) / 0.12;
+      y = ringH * Math.min(1, u * 2);                     // rise onto the ring in the first half = a climb
+      x = spawnX * 0.35 + (spawnX - spawnX * 0.35) * u;
+      z = APPROACH_Z + (spawnZ - APPROACH_Z) * u;
+      walking = true;
     } else {                        // settle at the ring spawn, final pose
       x = spawnX; z = spawnZ; y = ringH;
     }
+    f.relaxed = true;              // casual/cool entrance posture (no combat guard on the way out)
     f.x = x; f.y = y; f.z = z; f.yaw = Math.atan2(-x, -z) + (walking ? (f._lookCrowd || 0) : 0);
     if (walking) {
       // fake forward velocity so the Animator actually plays the walk cycle
