@@ -399,9 +399,12 @@ export class Animator {
     const id = this.c.id, w = Math.sin(time * 6), s = Math.sin(time * 9);
     switch (id) {
       case 'ajan': {
-        if (v.ateFood) { // already ate: chest beat
+        if (v.ateFood) { // already ate: chest beat + heavy alternating stomps
           set(t, 'handL', [-0.1, 0.05, 0.35 + 0.1 * Math.max(0, s)]); set(t, 'handR', [-0.1, 0.05, 0.35 + 0.1 * Math.max(0, -s)]);
           set(t, 'chest', [-0.15, 0, 0]); set(t, 'head', [-0.35, 0, 0]);
+          const st = Math.sin(time * 5); // stomp: drive one foot up then down
+          set(t, 'footL', [0.3 * Math.max(0, st), 0, 0]); set(t, 'footR', [0.3 * Math.max(0, -st), 0, 0]);
+          set(t, 'hipsOff', [0, -0.04 * Math.abs(st), 0]);
           return 30;
         }
         // bring the food to the mouth, take bites, chew
@@ -412,10 +415,20 @@ export class Animator {
         set(t, 'chest', [0.05, 0.15, 0]); set(t, 'hipsOff', [0, -0.03 * bite, 0]);
         return 22;
       }
-      case 'max': // alternating weight curls
-        set(t, 'handL', [0.15, -0.1 + 0.55 * Math.max(0, w), 0.25]); set(t, 'handR', [0.15, -0.1 + 0.55 * Math.max(0, -w), 0.25]);
-        set(t, 'elbowL', [0.2, -1, 0]); set(t, 'elbowR', [0.2, -1, 0]); set(t, 'chest', [-0.15, 0, 0]); set(t, 'head', [-0.25, 0, 0]);
-        return 24;
+      case 'max': // hand on the chest, snap it up to 45°, then wave to the crowd
+        if (time < 0.9) {        // right hand flat on the chest
+          set(t, 'handR', [-0.1, 0.1, 0.42]); set(t, 'elbowR', [0.9, -0.5, 0]);
+          set(t, 'handL', [0.12, -0.5, 0.25]); set(t, 'chest', [-0.12, 0, 0]); set(t, 'head', [-0.2, 0, 0]);
+        } else if (time < 1.7) { // snap it up and out to a 45° salute at the sky
+          const u = Math.min(1, (time - 0.9) / 0.35);
+          set(t, 'handR', [0.1, 0.1 + 0.75 * u, 0.42 + 0.1 * u]); set(t, 'elbowR', [0.3 + 0.2 * u, -0.3, 0]);
+          set(t, 'chest', [-0.2, 0, 0]); set(t, 'head', [-0.35 * u, 0, 0]);
+        } else {                 // big wave to the crowd
+          set(t, 'handR', [0.1, 1.0, 0.15 + 0.35 * Math.sin(time * 7)]); set(t, 'elbowR', [0.2, -0.2, 0]);
+          set(t, 'head', [-0.3, 0.2 * Math.sin(time * 3.5), 0]); set(t, 'chest', [-0.2, 0, 0]);
+          set(t, 'handL', [0.12, -0.5, 0.25]);
+        }
+        return 22;
       case 'rise': // double-biceps flex
         set(t, 'handL', [0.55, 0.6, 0.0]); set(t, 'handR', [0.55, 0.6, 0.0]); set(t, 'elbowL', [0.2, -1, 0.2]); set(t, 'elbowR', [0.2, -1, 0.2]);
         set(t, 'chest', [-0.25 + 0.05 * w, 0, 0]); set(t, 'hipsOff', [0, -0.08, 0]); set(t, 'head', [-0.3, 0, 0]);

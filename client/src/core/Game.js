@@ -225,6 +225,7 @@ export class Game {
 
   endMatchCleanup() {
     this.entranceDir?.stop();
+    this._winnerMedia = false; this.entranceDir?.stopWinner();
     this.clearGore();
     this.restoreReferee();
     this.setRingGirls(false);
@@ -265,6 +266,7 @@ export class Game {
   showResults(info) {
     if (this.resultsShown) return;
     this.resultsShown = true;
+    this._winnerMedia = false; this.entranceDir?.stopWinner();
     this.input.enabled = false;
     if (document.pointerLockElement) document.exitPointerLock?.();
     const view = this.session.view();
@@ -432,6 +434,7 @@ export class Game {
     this.arena.updateRingDamage(view.ring);
     this.arena.setCageDoor(view.cageDoor);
     this.setRingGirls(['entrances', 'finished', 'over'].includes(view.match.phase));
+    if (this._winnerMedia && ['finished', 'over'].includes(view.match.phase)) this.entranceDir?.drawWinner();
     // slam/crash into a parked car → windshield shatters (glass + blood)
     for (const f of view.fighters) {
       if (!f.outside || f.hidden) continue;
@@ -828,6 +831,9 @@ export class Game {
   celebrationFX(e, byId, view) {
     this.confetti.start(10);
     const R = ARENA.ring;
+    // winner's song + video on the titantron, both looping through the celebration
+    const champ = (e.winners || []).map((id) => byId.get(id)).filter(Boolean)[0];
+    if (champ) { this._winnerMedia = true; this.entranceDir?.startWinner(champ.charId); }
     [[1, 1], [-1, 1], [-1, -1], [1, -1]].forEach(([sx, sz], i) => setTimeout(() => {
       const p = new THREE.Vector3(sx * R.postInset, R.height + R.postHeight + 0.1, sz * R.postInset);
       for (let k = 0; k < 4; k++) setTimeout(() => this.effects.burst(p, { n: 40, speed: 6, color: [1, 0.75, 0.3], size: 0.07, life: 0.9, grav: 0.8, up: 2.5 }), k * 140);
