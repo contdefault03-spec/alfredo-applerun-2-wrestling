@@ -213,7 +213,8 @@ export class ArenaView {
    * @param {object} assets AssetManager (props already loaded)
    */
   placeCars(assets) {
-    const specs = [{ id: 'car1', x: -7.8, z: 13.6, rot: 0.3 }, { id: 'car2', x: 8.0, z: 14.3, rot: -0.35 }];
+    const E = ARENA.entrance, stageZ = E.zEnd + 2;
+    const specs = [{ id: 'car1', x: -6.5, z: 12.5 }, { id: 'car2', x: 6.8, z: 12.8 }];
     this.cars = [];
     for (const s of specs) {
       const src = assets.props?.[s.id]; if (!src) continue;
@@ -223,17 +224,18 @@ export class ArenaView {
       const scale = 4.3 / len;                                   // ~4.3 m long
       car.scale.setScalar(scale);
       car.position.set(s.x, -box.min.y * scale, s.z);
-      car.rotation.y = s.rot;
+      car.rotation.y = Math.atan2(-s.x, stageZ - s.z);           // face the stage/entrance
       car.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
       this.group.add(car);
-      // a windshield pane (breakable) sitting on the car
-      const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9),
-        new THREE.MeshStandardMaterial({ color: 0x9fd0e6, transparent: true, opacity: 0.4, roughness: 0.1, metalness: 0.3, side: THREE.DoubleSide }));
+      // a windshield pane (breakable) sitting on the car, tilted, facing the stage
+      const rotY = car.rotation.y;
+      const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.85),
+        new THREE.MeshStandardMaterial({ color: 0x9fd0e6, transparent: true, opacity: 0.45, roughness: 0.1, metalness: 0.3, side: THREE.DoubleSide }));
       const b2 = new THREE.Box3().setFromObject(car);
-      pane.position.set(s.x, (b2.max.y - b2.min.y) * 0.62, s.z);
-      pane.rotation.set(-0.9, s.rot, 0);
+      pane.position.set(s.x + Math.sin(rotY) * 0.6, (b2.max.y - b2.min.y) * 0.6, s.z + Math.cos(rotY) * 0.6);
+      pane.rotation.set(-0.9, rotY, 0);
       this.group.add(pane);
-      this.cars.push({ group: car, pane, x: s.x, z: s.z, broken: false });
+      this.cars.push({ group: car, pane, x: s.x, z: s.z, rotY, broken: false });
     }
   }
 

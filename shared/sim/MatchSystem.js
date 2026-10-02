@@ -348,10 +348,10 @@ export class MatchSystem {
       w.combat.applyHit(f, v, { damage: dmg, reaction: 'knockdown', knockback: 3, unblockable: true, sound: 'impact', move: 'high_drop', moveName: 'High Drop', special: true, crowd: 1 });
       hit++;
     }
-    // the ring takes extreme damage where they land (breaks an already-cracked section)
-    if (w.arena.isInsideRingSquare(x, z, -0.2)) { w.ring.registerImpact(x, z); w.ring.registerImpact(x, z); }
-    // the diver: safe-ish on a hit, hurt on a miss
-    setState(f, S.DOWN); f.downTimer = hit ? 1.0 : 1.8; f.mash = 0;
+    // a drop from the rafters ALWAYS smashes the ring open where they land
+    if (w.arena.isInsideRingSquare(x, z, -0.2)) w.ring.breakChance(x, z, 1);
+    // the diver: safe-ish on a hit, hurt on a miss; lands beside the hole (brief fall immunity)
+    setState(f, S.DOWN); f.downTimer = hit ? 1.0 : 1.8; f.mash = 0; f.noFall = (f.downTimer || 1) + 0.5;
     if (!hit) w.combat.applyEnvDamage(f, HIGH_DROP_SELF, 'high_drop_miss');
     w.emit('high_drop', { fighter: f.id, x, z, radius: HIGH_DROP_RADIUS, hits: hit });
   }

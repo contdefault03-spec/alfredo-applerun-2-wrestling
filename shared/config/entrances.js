@@ -19,7 +19,7 @@ export const BASE_ENTRANCE = {
   country: 'PARTS UNKNOWN',   // billed hometown/nation the announcer calls out
   weight: 220,                // billed weight in POUNDS (what the announcer says)
   duration: 11,               // authoritative entrance length in seconds (~= song length)
-  loopVideo: false,           // the clip plays once (entrance lasts the whole song)
+  loopVideo: true,            // the clip loops for the whole entrance; stops cleanly at the end
   // choreography flags the cinematic director reads (all optional):
   entranceModel: null,        // alternate GLB worn on the way out (Max's coat/hat)
   coatThrow: false,           // strips coat/hat/glasses into the crowd, swaps model
