@@ -107,8 +107,12 @@ export class GeminiProvider {
     if (!this.ttsLimiter.allow(clientKey)) return null;
     const style = voiceStyleFor(speaker);
     const p = (async () => {
+      // GUARANTEE: the spoken content is ONLY the line itself – never the style
+      // directive. Timbre/delivery comes from the prebuilt voice, not from text
+      // the model could read aloud. (A text style-prefix used to leak into audio.)
+      void style;
       const j = await this.callWithFallback('tts', () => ({
-        contents: [{ parts: [{ text: `${style}: ${spoken.slice(0, 220)}` }] }],
+        contents: [{ parts: [{ text: spoken.slice(0, 220) }] }],
         generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: this.voices[speaker] } } } },
       }), 12000);
       const part = j.candidates?.[0]?.content?.parts?.find((x) => x.inlineData);

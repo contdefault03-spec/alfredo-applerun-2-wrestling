@@ -250,19 +250,22 @@ export class AISystem {
       else { const dd = this.moveToward(f, b.goal.x, b.goal.z, true); if (dd < 0.5) { this.press(f, BTN.INTERACT); b.mode = 'chase'; b.goal = null; } return; }
     }
 
-    // ── ITEMS: go get one, or use the one we have ──
+    // ── ITEMS: contextual, with a cooldown so the AI doesn't spam grabbing/throwing ──
     if (f.item != null) {
-      if (d > 3 && d < 9 && rand() < 0.25) { this.press(f, BTN.THROW); return; }
+      // up close, smash with what we're holding; only throw occasionally at mid-range
       if (d < reach + 0.5) { this.press(f, rand() < 0.4 ? BTN.KICK : BTN.PUNCH); return; }
-    } else if (rand() < cfg.itemChance * 0.15 || b.mode === 'getItem') {
+      if (d > 3 && d < 8 && b.t > (b.itemUntil || 0) && rand() < 0.05) { this.press(f, BTN.THROW); b.itemUntil = b.t + 2.5; return; }
+    } else if (b.mode === 'getItem' || (d > 3.5 && b.t > (b.itemUntil || 0) && rand() < cfg.itemChance * 0.06)) {
+      // only fetch an item from range (never mid-brawl), and not again for a few seconds
       const it = this.nearestItem(f, 7);
       if (it && (d > 2.5 || b.mode === 'getItem')) {
         b.mode = 'getItem';
         const izone = w.arena.isInsideRingSquare(it.x, it.z) && it.y > 1 ? ZONE.RING : ZONE.FLOOR;
-        if (Math.hypot(it.x - f.x, it.z - f.z) < 1.1 + f.c.radius && izone === f.zone) { this.press(f, BTN.INTERACT); b.mode = 'chase'; return; }
+        if (Math.hypot(it.x - f.x, it.z - f.z) < 1.1 + f.c.radius && izone === f.zone) { this.press(f, BTN.INTERACT); b.mode = 'chase'; b.itemUntil = b.t + 3.5; return; }
         this.navigate(f, it.x, it.z, izone, true);
         return;
       }
+      b.itemUntil = b.t + 1.5; // nothing reachable – don't re-check every tick
       if (b.mode === 'getItem') b.mode = 'chase';
     }
 

@@ -346,6 +346,19 @@ export class ArenaView {
       beam.rotation.set((Math.random() - 0.5) * 0.4, Math.random() * 0.5, (Math.random() - 0.5) * 0.5);
       beam.castShadow = true; grp.add(beam);
     }
+    // the whole section has COLLAPSED: a big canvas+plywood slab hinged at one
+    // edge and tilted ~38° down into the hole (physical, not a flat decal)
+    const tilt = 0.66; // ~38°, within the 30–45° ask
+    const slab = new THREE.Group();
+    const plankTop = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.92, CELL * 0.9), canvasMat);
+    plankTop.rotation.x = -Math.PI / 2; plankTop.material.side = THREE.DoubleSide; slab.add(plankTop);
+    const woodUnder = new THREE.Mesh(new THREE.BoxGeometry(CELL * 0.92, 0.08, CELL * 0.9), std({ color: 0x6b4a28, roughness: 0.95 }));
+    woodUnder.position.y = -0.06; slab.add(woodUnder);
+    // hinge at the -z edge, dip the +z edge into the pit
+    slab.position.set(0, -0.02, -CELL * 0.45);
+    slab.rotation.x = tilt;
+    slab.position.z += Math.sin(tilt) * CELL * 0.45; slab.position.y -= Math.sin(tilt) * CELL * 0.35;
+    grp.add(slab);
     // torn canvas flaps folding down into the hole (tilted slabs, not a flat square)
     for (const s of [-1, 1]) {
       const flap = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.55, CELL * 0.5), canvasMat);
@@ -367,6 +380,50 @@ export class ArenaView {
     this.group.add(grp); this._debris[k] = grp;
   }
 
+  /**
+   * Snap a rope on a given side: it stays anchored at one post and the broken
+   * half droops/hangs down to the mat from the snap point. Returns true if it broke.
+   */
+  breakRope(side, idx = Math.floor(Math.random() * 3)) {
+    this._brokenRopes = this._brokenRopes || new Set();
+    const key = side + '-' + idx;
+    if (this._brokenRopes.has(key)) return false;
+    const rope = this.ropes.find((r) => r.side === side && r.index === idx);
+    if (!rope) return false;
+    this._brokenRopes.add(key);
+    rope.mesh.visible = false;                              // taut rope is gone
+    rope.broken = true;
+    const pi = R.postInset, H = R.height, y = H + rope.height;
+    const ends = [
+      [[-pi, pi], [pi, pi]], [[pi, pi], [pi, -pi]], [[pi, -pi], [-pi, -pi]], [[-pi, -pi], [-pi, pi]],
+    ][side];
+    const a = new THREE.Vector3(ends[0][0], y, ends[0][1]);
+    const b = new THREE.Vector3(ends[1][0], y, ends[1][1]);
+    const col = [0xc8102e, 0xf0f0f0, 0x1a3a8f][idx];
+    const mat = std({ color: col, roughness: 0.5 });
+    const grp = new THREE.Group(); this.group.add(grp);
+    // the attached half still spans ~60% from post A, sagging
+    const mid = a.clone().lerp(b, 0.55);
+    const seg1 = this._ropePiece(a, mid.clone().setY(y - 0.25), mat); grp.add(seg1);
+    // the snapped half hangs straight down from the break point to the mat
+    const hangTop = mid.clone().setY(y - 0.25);
+    const hangBot = mid.clone().setY(H + 0.05);
+    grp.add(this._ropePiece(hangTop, hangBot, mat));
+    // a frayed stub dangling off post B
+    grp.add(this._ropePiece(b, b.clone().setY(y - 0.4).lerp(a, 0.08), mat));
+    this._ropeDebris = this._ropeDebris || []; this._ropeDebris.push(grp);
+    return true;
+  }
+  _ropePiece(p0, p1, mat) {
+    const len = p0.distanceTo(p1);
+    const geo = new THREE.CylinderGeometry(0.032, 0.032, Math.max(0.05, len), 8);
+    const m = new THREE.Mesh(geo, mat);
+    m.position.copy(p0).lerp(p1, 0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p1.clone().sub(p0).normalize());
+    m.castShadow = true; m.frustumCulled = false;
+    return m;
+  }
+
   /** Clear all ring-break visuals (called between matches). */
   resetRingDamage() {
     if (this._debris) {
@@ -377,6 +434,10 @@ export class ArenaView {
       this._debris = {};
     }
     if (this.ringDmgCells) for (let k = 0; k < this.ringDmgCells.length; k++) { this.ringDmgCells[k].visible = false; this.ringDmgState[k] = 0; }
+    // restore snapped ropes
+    if (this._ropeDebris) { for (const g of this._ropeDebris) { this.group.remove(g); g.traverse((o) => { if (o.isMesh) { o.geometry?.dispose?.(); o.material?.dispose?.(); } }); } this._ropeDebris = []; }
+    for (const rope of this.ropes || []) { rope.mesh.visible = true; rope.broken = false; }
+    this._brokenRopes = new Set();
   }
 
   /** Target shadow on the canvas showing where a rafter diver will land. */

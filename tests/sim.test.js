@@ -163,6 +163,18 @@ test('grab → slam puts the opponent down; Lucky cannot lift Ajan (takedown ins
   assert.ok(ev2.some((e) => e.type === 'hit' && e.move === 'takedown'));
 });
 
+test('Rize regains control right after his special (no hit needed to unlock)', () => {
+  const w = world(['rise', 'lucky']);
+  const a = w.byId(1), b = w.byId(2);
+  faceEachOther(a, b, 1.3);
+  a.meter = 100; a.specialCd = 0; a.input.pressed = BTN.SPECIAL;
+  steps(w, 220); // well past the ability duration
+  assert.notEqual(a.state, S.SPECIAL, 'not stuck in the special');
+  const x0 = a.x;
+  steps(w, 50, () => { a.input.mx = 1; a.input.mz = 0; a.input.held = 0; });
+  assert.ok(Math.abs(a.x - x0) > 0.3, `Rize can move after the special (moved ${Math.abs(a.x - x0).toFixed(2)})`);
+});
+
 test('a held opponent can be carried/dragged around, staying in front of the carrier', () => {
   const w = world(['ajan', 'lucky']); // Ajan easily holds Lucky
   const a = w.byId(1), v = w.byId(2);

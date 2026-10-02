@@ -94,13 +94,20 @@ export class EntranceDirector {
     if (p < reveal) {               // reveal / pose (or stomp) on the stage
       x = 0; z = STAGE_Z; y = 0;
     } else if (p < 0.78) {          // walk down the ramp toward the ring
-      const u = (p - reveal) / (0.78 - reveal); x = spawnX * 0.35 * u; z = STAGE_Z + (APPROACH_Z - STAGE_Z) * u; y = 0; walking = true;
+      const raw = (p - reveal) / (0.78 - reveal);
+      // human pacing: a slight speed ripple (occasional slow/fast) instead of a constant march
+      const uu = Math.max(0, Math.min(1, raw + Math.sin(raw * Math.PI * 2.5) * 0.035));
+      // a gentle side-to-side zig-zag that settles as they near the ring; per-character amount
+      const swayAmt = f.charId === 'lucky' ? 0.14 : f.charId === 'max' ? 0.5 : f.charId === 'ajan' ? 0.25 : 0.4;
+      const sway = Math.sin(raw * Math.PI * 3 + (f._spawnX || 0)) * swayAmt * (1 - raw);
+      x = spawnX * 0.35 * uu + sway; z = STAGE_Z + (APPROACH_Z - STAGE_Z) * uu; y = 0; walking = true;
+      f._lookCrowd = Math.sin(raw * Math.PI * 4) * 0.3; // slight head/body turn toward the crowd
     } else if (p < 0.9) {           // climb into the ring
       const u = (p - 0.78) / 0.12; x = spawnX * 0.35 + (spawnX - spawnX * 0.35) * u; z = APPROACH_Z + (spawnZ - APPROACH_Z) * u; y = ringH * u; walking = true;
     } else {                        // settle at the ring spawn, final pose
       x = spawnX; z = spawnZ; y = ringH;
     }
-    f.x = x; f.y = y; f.z = z; f.yaw = Math.atan2(-x, -z);
+    f.x = x; f.y = y; f.z = z; f.yaw = Math.atan2(-x, -z) + (walking ? (f._lookCrowd || 0) : 0);
     if (walking) {
       // fake forward velocity so the Animator actually plays the walk cycle
       const spd = (f.c?.walkSpeed || 2.6);

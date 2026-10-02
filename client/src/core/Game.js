@@ -591,6 +591,12 @@ export class Game {
           E.burst(bp, { n: 40, speed: 4, color: [0.4, 0.33, 0.22], size: 0.18, life: 1.2, additive: false, grav: 1.6, up: 2 }); // dust/dirt
           E.burst(bp, { n: 24, speed: 5, color: [0.5, 0.36, 0.2], size: 0.12, life: 1.0, additive: false, grav: 2 });          // splinters
           ui.banner('THE RING BREAKS!', '', 1800); C.react('big'); A.crowdPop(1.6);
+          // ~30% chance a rope on the nearest side snaps too
+          if (Math.random() < 0.30) {
+            const x = e.x ?? 0, z = e.z ?? 0;
+            const side = Math.abs(x) > Math.abs(z) ? (x > 0 ? 1 : 3) : (z > 0 ? 0 : 2);
+            if (this.arena.breakRope(side)) { A.play('cage', bp, { volume: 1 }); ui.feed('A rope snaps!'); }
+          }
           break;
         }
         case 'ring_fall': { const fp = { x: e.x ?? 0, y: ARENA.ring.height, z: e.z ?? 0 }; A.play('bodyfall', fp, { volume: 1.3 }); cam.shake(0.6); E.burst(fp, { n: 18, speed: 3, color: [0.4, 0.33, 0.22], size: 0.12, life: 0.8, grav: 1.5 }); C.react('big'); A.crowdPop(1); break; }

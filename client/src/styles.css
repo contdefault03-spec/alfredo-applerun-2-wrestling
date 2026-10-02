@@ -113,7 +113,7 @@ input, select { font-family: var(--body); font-size: 16px; }
 .clock { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); text-align: center; }
 .clock .t { font-family: var(--display); font-size: 44px; line-height: 1; background: rgba(0,0,0,.55); padding: 2px 16px; border: 1px solid var(--line); }
 .clock .m { font-size: 13px; letter-spacing: 3px; color: var(--gold2); margin-top: 3px; font-weight: 700; }
-.banner { position: absolute; top: 30%; left: 0; right: 0; text-align: center; font-family: var(--display); font-size: clamp(60px, 10vw, 150px); color: #fff;
+.banner { position: absolute; top: 9%; left: 0; right: 0; text-align: center; font-family: var(--display); font-size: clamp(44px, 7.2vw, 104px); color: #fff;
   text-shadow: 0 0 30px rgba(255,160,40,.8), 0 8px 0 #7a1020; letter-spacing: 6px; opacity: 0; transform: scale(1.4); transition: opacity .2s, transform .25s; }
 .banner.show { opacity: 1; transform: scale(1); }
 .banner .s { display: block; font-size: .3em; letter-spacing: 8px; color: var(--gold2); text-shadow: 0 2px 6px #000; }
