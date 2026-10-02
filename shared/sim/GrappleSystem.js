@@ -102,10 +102,18 @@ export class GrappleSystem {
     const w = this.world;
     const v = w.byId(f.holding);
     if (!v || v.state !== S.HELD) { f.holding = null; setState(f, S.IDLE); return; }
-    f.vx *= 0.5; f.vz *= 0.5;
+    const inp = f.input;
+    // carry / drag the opponent around (slower than a free walk); stand still mid-strike
+    const moving = f.sub !== 1 && Math.hypot(inp.mx, inp.mz) > 0.2;
+    if (moving) {
+      const sp = (f.c.walkSpeed || 2.6) * 0.55;
+      f.vx = inp.mx * sp; f.vz = inp.mz * sp;
+      f.yaw = Math.atan2(inp.mx, inp.mz);
+    } else { f.vx *= 0.5; f.vz *= 0.5; }
     const gap = (f.c.radius + v.c.radius) * 0.78;
     const fw = forwardOf(f);
     v.x = f.x + fw.x * gap; v.z = f.z + fw.z * gap; v.y = f.y; v.yaw = f.yaw + Math.PI; v.vx = v.vy = v.vz = 0;
+    v.zone = f.zone; v.outside = f.outside;   // the carried opponent comes along to wherever we drag them
     // grapple strike in progress
     if (f.sub === 1) {
       if (f.stateTime - f.gstrikeAt > 0.18 && !f.gstrikeHit) {
@@ -120,7 +128,7 @@ export class GrappleSystem {
       return;
     }
     const p = f.input.pressed;
-    if (f.stateTime > HOLD_MAX) { this.separate(f, v); return; }
+    if (f.stateTime > HOLD_MAX && !moving) { this.separate(f, v); return; }
     if (p & BTN.SPECIAL && w.abilities.tryGrappleSpecial(f, v)) return;
     if (p & BTN.PUNCH && f.gstrikes < 3) { f.sub = 1; f.gstrikeAt = f.stateTime; f.gstrikeHit = false; f.gstrikes++; w.emit('attack', { fighter: f.id, move: 'grapple_strike' }); return; }
     if (p & BTN.KICK) { this.startMove(f, v, this.pickSlam(f, v)); return; }

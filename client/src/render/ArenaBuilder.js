@@ -11,6 +11,35 @@ import * as TX from './Textures.js';
 
 const R = ARENA.ring;
 
+// a spider-web cracked-glass texture (transparent, white crack lines) for a smashed windshield
+let _crackTex = null;
+function crackedGlassTexture() {
+  if (_crackTex) return _crackTex;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  x.clearRect(0, 0, 256, 256);
+  x.fillStyle = 'rgba(190,220,235,0.12)'; x.fillRect(0, 0, 256, 256);
+  const cx = 150, cy = 120;                                 // impact point, off-centre
+  x.strokeStyle = 'rgba(255,255,255,0.9)'; x.lineJoin = 'round';
+  // radial fractures
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
+    x.lineWidth = 0.8 + Math.random() * 1.6;
+    x.beginPath(); x.moveTo(cx, cy);
+    let px = cx, py = cy;
+    const segs = 3 + Math.floor(Math.random() * 3);
+    for (let s = 0; s < segs; s++) { px += Math.cos(a) * (18 + Math.random() * 30) + (Math.random() - 0.5) * 14; py += Math.sin(a) * (18 + Math.random() * 30) + (Math.random() - 0.5) * 14; x.lineTo(px, py); }
+    x.stroke();
+  }
+  // concentric web rings
+  for (let r = 14; r < 120; r += 16 + Math.random() * 10) {
+    x.lineWidth = 0.6; x.beginPath();
+    for (let a = 0; a <= Math.PI * 2 + 0.1; a += 0.3) { const rr = r * (0.85 + Math.random() * 0.3); const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr; a === 0 ? x.moveTo(px, py) : x.lineTo(px, py); }
+    x.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  _crackTex = t; return t;
+}
+
 function std(opts) { return new THREE.MeshStandardMaterial(opts); }
 function add(parent, geo, mat, { cast = true, receive = true, pos = null } = {}) {
   const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = receive;
@@ -247,12 +276,35 @@ export class ArenaView {
     return best;
   }
 
-  /** Smash a car's windshield (visual). */
+  /**
+   * Windshield damage, two beats: first impact CRACKS it (spider-web texture),
+   * the next SHATTERS it (pane gone → empty frame; glass shards spawned by the
+   * caller's carCrashFX). Returns 'crack' | 'shatter' | false (nothing to do).
+   */
   breakCar(car) {
     if (!car || car.broken) return false;
+    if (!car.cracked) {
+      car.cracked = true;
+      if (car.pane) {
+        car.pane.material.map = crackedGlassTexture();
+        car.pane.material.color.set(0xffffff);
+        car.pane.material.opacity = 0.9;
+        car.pane.material.needsUpdate = true;
+        car.pane.rotation.z += 0.03;
+      }
+      return 'crack';
+    }
     car.broken = true;
-    if (car.pane) { car.pane.material.opacity = 0.12; car.pane.material.color.set(0xdfeaf0); car.pane.rotation.z += 0.08; }
-    return true;
+    if (car.pane) { car.pane.visible = false; }   // shattered out – just the dark empty frame remains
+    return 'shatter';
+  }
+
+  /** Restore both cars' windshields (called on match cleanup). */
+  resetCars() {
+    for (const car of this.cars || []) {
+      car.broken = false; car.cracked = false; car._crashing = false;
+      if (car.pane) { car.pane.visible = true; car.pane.material.map = null; car.pane.material.color.set(0x9fd0e6); car.pane.material.opacity = 0.45; car.pane.material.needsUpdate = true; }
+    }
   }
 
   // ── ring destruction overlays (cracks + holes), toggled from the snapshot ──
