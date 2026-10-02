@@ -557,6 +557,7 @@ export class Game {
           if (e.heavy) { cam.punch(e.special ? 6 : 2.5); this.renderer.impactFlash(e.special ? 0.35 : 0.12); }
           C.react('pop', e.crowd ?? 0.1); A.crowdPop((e.crowd ?? 0.1) * 0.8);
           if (p && (involved(e) || e.heavy)) this.damageNumber(p, e.damage);
+          if (p && e.damage >= 70 && this.settings.get().gore !== false) this.bloodHit(p, Math.min(1.5, e.damage / 90)); // hurt badly → blood
           break;
         }
         case 'block': A.play('block', p); E.burst(p, { n: 6, speed: 2, color: [0.6, 0.8, 1], size: 0.06, life: 0.2 }); break;
@@ -658,11 +659,19 @@ export class Game {
     }
   }
 
-  /** Windshield smash: glass shards + blood at the car. */
+  /** Windshield smash: real glass shards fly off + blood + crack the pane. */
   carCrashFX(car) {
     const p = new THREE.Vector3(car.pane ? car.pane.position.x : car.x, car.pane ? car.pane.position.y : 1.2, car.pane ? car.pane.position.z : car.z);
-    this.effects.burst(p, { n: 46, speed: 5, color: [0.78, 0.92, 1], size: 0.06, life: 1.1, additive: false, grav: 2.2, up: 1.5 }); // glass
-    this.effects.burst(p, { n: 20, speed: 3, color: [0.72, 0.02, 0.04], size: 0.1, life: 1.2, additive: false, grav: 2.4, up: 1 }); // blood
+    this.effects.burst(p, { n: 40, speed: 5, color: [0.82, 0.93, 1], size: 0.05, life: 1.0, additive: true, grav: 2.2, up: 1.5 });      // glass glint
+    this.effects.burst(p, { n: 18, speed: 3, color: [0.72, 0.02, 0.04], size: 0.1, life: 1.2, additive: false, grav: 2.4, up: 1 });       // blood
+    // physical glass shards that fly and fall
+    const shardMat = new THREE.MeshStandardMaterial({ color: 0xbfe0ef, transparent: true, opacity: 0.6, roughness: 0.1, metalness: 0.3 });
+    for (let i = 0; i < 12; i++) {
+      const s = new THREE.Mesh(new THREE.TetrahedronGeometry(0.06 + Math.random() * 0.06), shardMat);
+      s.position.copy(p); this.scene.add(s);
+      const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 3;
+      this.gorePieces.push({ mesh: s, vx: Math.cos(a) * sp, vy: 2 + Math.random() * 2.5, vz: Math.sin(a) * sp - 2, spin: (Math.random() - 0.5) * 20, landed: false });
+    }
     this.audio.play('metal', p, { volume: 1.3 });
     this.audio.crowdPop?.(1.1);
     this.camera.shake(0.5);
@@ -708,6 +717,12 @@ export class Game {
     m.rotation.y = Math.random() * Math.PI; m.renderOrder = 1;
     this.scene.add(m); this.bloodDecals.push(m);
     if (this.bloodDecals.length > 80) { const old = this.bloodDecals.shift(); this.scene.remove(old); old.geometry.dispose?.(); old.material.dispose?.(); }
+  }
+
+  /** Blood spray from a hard hit (no dismemberment) + an occasional floor splat. */
+  bloodHit(p, amount = 1) {
+    this.effects.burst({ x: p.x, y: p.y, z: p.z }, { n: Math.round(14 * amount), speed: 2.5 * amount, color: [0.72, 0.02, 0.04], size: 0.11, life: 0.7, additive: false, grav: 2.4, up: 1.6 });
+    if (Math.random() < 0.5) this.bloodDecal(p.x, p.z, 0.5 * amount);
   }
 
   /** KO gore: blood that splatters + stays, and an actual limb torn off the body. */
