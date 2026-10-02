@@ -3,7 +3,8 @@
 // the referee NPC (simulated so every client sees the same count).
 import { ARENA } from '../config/arena.js';
 import { getEntrance } from '../config/entrances.js';
-import { S, ZONE, DOWN_STATES, REF_WARN_HITS, REF_HEAT_WINDOW, REF_WARN_TIME, REF_DOWN_TIME, REF_GRAB_RANGE } from './constants.js';
+import { S, ZONE, DOWN_STATES, REF_WARN_HITS, REF_HEAT_WINDOW, REF_WARN_TIME, REF_DOWN_TIME, REF_GRAB_RANGE,
+  HIGH_DROP_RADIUS, HIGH_DROP_DAMAGE, HIGH_DROP_SELF, REF_DEATHS } from './constants.js';
 import { setState, dist2D, isAlive, hpFrac, angleTo, turnToward } from './Fighter.js';
 
 const R = ARENA.ring;
@@ -23,7 +24,7 @@ export class MatchSystem {
     this.pin = null;
     this.winnerTeam = null; this.winners = []; this.method = null;
     this.elimOrder = [];
-    this.referee = { x: 0, y: R.height, z: -1.5, yaw: 0, zone: ZONE.RING, state: 'watch', count: 0, t: 0, focus: null, warnTarget: null, warnT: 0, downT: 0 };
+    this.referee = { x: 0, y: R.height, z: -1.5, yaw: 0, zone: ZONE.RING, state: 'watch', count: 0, t: 0, focus: null, warnTarget: null, warnT: 0, downT: 0, grabCount: 0, dead: false };
     // ── entrance state (authoritative; mirrored to clients in the snapshot) ──
     this.entranceOrder = [];      // fighter ids, in entry order
     this.entranceIndex = -1;      // -1 = not started yet
@@ -334,6 +335,27 @@ export class MatchSystem {
     w.emit('match_end', { winnerTeam: team, winners: this.winners, method, ...detail });
   }
 
+  /** Resolve a wrestler's drop from the rafters: radius impact + ring damage. */
+  applyHighDrop(f) {
+    const w = this.world;
+    const x = f.x, z = f.z;
+    let hit = 0;
+    for (const v of w.fighters) {
+      if (v === f || v.hidden || v.eliminated || v.state === S.KO) continue;
+      const d = Math.hypot(v.x - x, v.z - z);
+      if (d > HIGH_DROP_RADIUS) continue;
+      const dmg = Math.round(HIGH_DROP_DAMAGE * (1 - 0.5 * (d / HIGH_DROP_RADIUS))); // falloff
+      w.combat.applyHit(f, v, { damage: dmg, reaction: 'knockdown', knockback: 3, unblockable: true, sound: 'impact', move: 'high_drop', moveName: 'High Drop', special: true, crowd: 1 });
+      hit++;
+    }
+    // the ring takes extreme damage where they land (breaks an already-cracked section)
+    if (w.arena.isInsideRingSquare(x, z, -0.2)) { w.ring.registerImpact(x, z); w.ring.registerImpact(x, z); }
+    // the diver: safe-ish on a hit, hurt on a miss
+    setState(f, S.DOWN); f.downTimer = hit ? 1.0 : 1.8; f.mash = 0;
+    if (!hit) w.combat.applyEnvDamage(f, HIGH_DROP_SELF, 'high_drop_miss');
+    w.emit('high_drop', { fighter: f.id, x, z, radius: HIGH_DROP_RADIUS, hits: hit });
+  }
+
   // ── referee interference ──
   /** Decide whether the ref should step in (or keep stepping in). */
   checkInterference(dt) {
@@ -372,8 +394,10 @@ export class MatchSystem {
     if (!f || !isAlive(f) || f.hidden) return false;
     if (Math.hypot(ref.x - f.x, ref.z - f.z) > REF_GRAB_RANGE) return false;
     ref.state = 'down'; ref.downT = REF_DOWN_TIME; ref.warnTarget = null; ref.blocked = false;
+    ref.grabCount = (ref.grabCount || 0) + 1;
     f.refHeat = 0;
-    w.emit('ref_grabbed', { fighter: fighterId });
+    w.emit('ref_grabbed', { fighter: fighterId, count: ref.grabCount });
+    if (ref.grabCount >= REF_DEATHS) { ref.dead = true; w.emit('ref_dead', { by: fighterId }); } // out for the rest of the match
     return true;
   }
 
@@ -392,8 +416,8 @@ export class MatchSystem {
     if (ref.state === 'down') {
       ref.downT -= dt;
       ref.y += ((w.arena.isInsideRingSquare(ref.x, ref.z) ? R.height : 0) - ref.y) * Math.min(1, dt * 6);
-      if (ref.downT <= 0) { ref.state = 'watch'; ref.warnTarget = null; w.emit('ref_recover', {}); }
-      return;
+      if (ref.downT <= 0 && !ref.dead) { ref.state = 'watch'; ref.warnTarget = null; w.emit('ref_recover', {}); }
+      return; // a dead ref never gets back up
     }
     this.checkInterference(dt);
     let tx = ref.x, tz = ref.z, speed = 2.4, face = null;

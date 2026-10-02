@@ -31,6 +31,22 @@ export class RingDestruction {
   constructor(world) {
     this.world = world;
     this.hits = new Array(RING_GRID * RING_GRID).fill(0);
+    this.testForce = false; // debug: make breakChance always succeed
+  }
+
+  /**
+   * Chance-based break at a position (a crush / special slam can smash the ring).
+   * Breaks the whole section outright on success. Authoritative RNG.
+   * @returns {boolean} whether it broke
+   */
+  breakChance(x, z, p) {
+    const k = this.cellOf(x, z);
+    if (k < 0 || this.level(k) === 2) return false;
+    if (!this.testForce && Math.random() >= p) return false;
+    this.hits[k] = RING_BREAK_HITS;
+    const c = cellCenter(k);
+    this.world.emit('ring_break', { cell: k, x: c.x, z: c.z });
+    return true;
   }
 
   /** Section index for a world position, or -1 if outside the canvas. */

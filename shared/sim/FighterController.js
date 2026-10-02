@@ -2,7 +2,7 @@
 // state machine, then integrates movement/physics against the arena.
 import { ATTACKS, DEFAULT_MOVESET } from '../config/attacks.js';
 import { ARENA } from '../config/arena.js';
-import { BTN, S, ZONE, FREE_STATES, DOWN_STATES } from './constants.js';
+import { BTN, S, ZONE, FREE_STATES, DOWN_STATES, RAFTER_Y, RAFTER_SPEED, RAFTER_REACH, HIGH_DROP_DUR } from './constants.js';
 import { setState, forwardOf, turnToward, angleTo, dist2D, isAlive, wrapAngle, hpFrac } from './Fighter.js';
 import { CELEBRATION_TIME } from './MatchSystem.js';
 
@@ -185,8 +185,12 @@ export class FighterController {
         f.vx = f.vz = 0; f.vy = 0;
         if (tgt) turnToward(f, angleTo(f, tgt.x, tgt.z), 6 * dt);
         if (pressed & (BTN.PUNCH | BTN.KICK | BTN.JUMP)) this.startDive(f, tgt);
+        else if ((pressed & BTN.INTERACT) && (f.input.held & BTN.RUN)) this.startRafterClimb(f); // keep climbing – up to the rafters
         else if (pressed & BTN.INTERACT) this.startClimb(f, 'down_corner');
         break;
+      case S.RAFTER_CLIMB: this.rafterClimbUpdate(f, dt); break;
+      case S.RAFTER: this.rafterUpdate(f, dt); break;
+      case S.RAFTER_DROP: this.rafterDropUpdate(f, dt); break;
       case S.CAGE_CLIMB: this.cageClimbUpdate(f, dt, tgt); break;
       case S.DIVE: this.diveUpdate(f, dt); break;
       case S.SPECIAL: w.abilities.update(f, dt); break;
@@ -349,7 +353,8 @@ export class FighterController {
       if (a.ropeGap(f.x, f.z) < 0.9) { this.startClimb(f, 'out'); return true; }
     } else if (f.zone === ZONE.FLOOR) {
       if (w.rules.cage && a.cageWallDist(f.x, f.z) < 0.9 + f.c.radius) { this.startCageClimb(f); return true; }
-      if (a.apronEdgeDist(f.x, f.z) < 0.9 + f.c.radius) { this.startClimb(f, 'in'); return true; }
+      if (!f.outside && a.apronEdgeDist(f.x, f.z) < 0.9 + f.c.radius) { this.startClimb(f, 'in'); return true; }
+      if (!w.rules.cage && this.nearBarricade(f)) { this.startVault(f); return true; }
     }
     return false;
   }
@@ -378,11 +383,12 @@ export class FighterController {
     const p = f.path; const t = Math.min(1, f.stateTime / f.stateDur);
     const e = t * t * (3 - 2 * t);
     f.x = p.x0 + (p.x1 - p.x0) * e; f.z = p.z0 + (p.z1 - p.z0) * e;
-    const lift = p.kind === 'out' ? Math.sin(t * Math.PI) * 0.3 : 0;
+    const lift = (p.kind === 'out' || p.kind === 'vault') ? Math.sin(t * Math.PI) * (p.kind === 'vault' ? 0.9 : 0.3) : 0;
     f.y = p.y0 + (p.y1 - p.y0) * Math.min(1, e * 1.3) + lift;
     f.vx = f.vy = f.vz = 0;
     if (t >= 1) {
       f.zone = p.zone; f.y = p.y1; f.onGround = true;
+      if (p.kind === 'vault') f.outside = p.goingOut;
       if (p.kind === 'corner') setState(f, S.PERCH);
       else if (p.kind === 'to_apron') setState(f, S.APRON);
       else setState(f, S.IDLE);
@@ -411,6 +417,78 @@ export class FighterController {
       setState(f, S.JUMP); f.vy = 0; f.onGround = false;
       f.x -= fw.x * 0.3; f.z -= fw.z * 0.3;
     }
+  }
+
+  // ── barricade vault ──────────────────────────────────────────────────────
+  nearBarricade(f) {
+    const B = ARENA.barricade, reach = 1.0 + f.c.radius;
+    const dx = B.halfX - Math.abs(f.x), dz = B.halfZ - Math.abs(f.z);
+    if (!f.outside) {
+      // near one barricade rail from the inside, but not at the entrance gap
+      const inGap = f.z > B.halfZ - reach && Math.abs(f.x) < B.gapHalf;
+      const nearX = dx < reach && dx > -0.3 && Math.abs(f.z) < B.halfZ;
+      const nearZ = dz < reach && dz > -0.3 && Math.abs(f.x) < B.halfX;
+      return !inGap && (nearX || nearZ);
+    }
+    // near one rail from the moat side
+    const nearX = Math.abs(dx) < reach && Math.abs(f.z) < B.halfZ + reach;
+    const nearZ = Math.abs(dz) < reach && Math.abs(f.x) < B.halfX + reach;
+    return nearX || nearZ;
+  }
+
+  startVault(f) {
+    const B = ARENA.barricade;
+    const goingOut = !f.outside;
+    const dx = B.halfX - Math.abs(f.x), dz = B.halfZ - Math.abs(f.z);
+    let x1 = f.x, z1 = f.z;
+    if (Math.abs(dx) <= Math.abs(dz)) { const s = Math.sign(f.x) || 1; x1 = s * (B.halfX + (goingOut ? 1.3 : -1.3)); }
+    else { const s = Math.sign(f.z) || 1; z1 = s * (B.halfZ + (goingOut ? 1.3 : -1.3)); }
+    setState(f, S.CLIMB, 0.7);
+    f.sub = 6;
+    f.path = { x0: f.x, y0: 0, z0: f.z, x1, y1: 0, z1, zone: ZONE.FLOOR, kind: 'vault', goingOut };
+    f.vx = f.vy = f.vz = 0;
+    f.yaw = Math.atan2(x1 - f.x, z1 - f.z);
+    this.world.emit('barricade_vault', { fighter: f.id, out: goingOut });
+  }
+
+  // ── rafters + high drop ─────────────────────────────────────────────────
+  startRafterClimb(f) {
+    const inset = R.postInset - 0.2;
+    const sx = Math.sign(f.x) || 1, sz = Math.sign(f.z) || 1;
+    setState(f, S.RAFTER_CLIMB, 1.1 / Math.sqrt(f.c.recoverySpeed));
+    f.path = { x0: f.x, y0: f.y, z0: f.z, x1: sx * inset, y1: RAFTER_Y, z1: sz * inset };
+    f.vx = f.vy = f.vz = 0; f.onGround = false;
+    this.world.emit('rafter_climb', { fighter: f.id });
+  }
+
+  rafterClimbUpdate(f, dt) {
+    const p = f.path, t = Math.min(1, f.stateTime / f.stateDur), e = t * t * (3 - 2 * t);
+    f.x = p.x0 + (p.x1 - p.x0) * e; f.z = p.z0 + (p.z1 - p.z0) * e; f.y = p.y0 + (p.y1 - p.y0) * e;
+    f.vx = f.vy = f.vz = 0; f.onGround = false;
+    if (t >= 1) { setState(f, S.RAFTER); f.y = RAFTER_Y; f.path = null; this.world.emit('rafter_top', { fighter: f.id }); }
+  }
+
+  rafterUpdate(f, dt) {
+    const inp = f.input;
+    // walk out along the rafters, clamped to above the ring
+    f.x = Math.max(-RAFTER_REACH, Math.min(RAFTER_REACH, f.x + inp.mx * RAFTER_SPEED * dt));
+    f.z = Math.max(-RAFTER_REACH, Math.min(RAFTER_REACH, f.z + inp.mz * RAFTER_SPEED * dt));
+    f.y = RAFTER_Y; f.vx = f.vy = f.vz = 0; f.onGround = false;
+    if (Math.hypot(inp.mx, inp.mz) > 0.1) f.yaw = Math.atan2(inp.mx, inp.mz);
+    if (inp.pressed & (BTN.PUNCH | BTN.KICK | BTN.INTERACT | BTN.JUMP)) this.startHighDrop(f);
+  }
+
+  startHighDrop(f) {
+    setState(f, S.RAFTER_DROP, HIGH_DROP_DUR);
+    f.path = { x0: f.x, y0: f.y, z0: f.z, x1: f.x, z1: f.z, y1: R.height };
+    f.vx = f.vy = f.vz = 0; f.onGround = false;
+    this.world.emit('high_drop_start', { fighter: f.id, x: f.x, z: f.z });
+  }
+
+  rafterDropUpdate(f, dt) {
+    const p = f.path, t = Math.min(1, f.stateTime / f.stateDur), e = t * t; // accelerate downward
+    f.y = p.y0 + (p.y1 - p.y0) * e; f.onGround = false; f.vx = f.vy = f.vz = 0;
+    if (t >= 1) { f.y = R.height; f.onGround = true; this.world.match.applyHighDrop(f); }
   }
 
   startDive(f, tgt) {
@@ -455,7 +533,8 @@ export class FighterController {
   physics(f, dt) {
     const w = this.world;
     const scripted = f.state === S.CLIMB || f.state === S.HELD || f.state === S.GRAPPLE_VICTIM || f.state === S.PERCH ||
-      f.state === S.CAGE_CLIMB || f.state === S.DIVE || f.state === S.APRON || (f.state === S.SPECIAL && f.path);
+      f.state === S.CAGE_CLIMB || f.state === S.DIVE || f.state === S.APRON || (f.state === S.SPECIAL && f.path) ||
+      f.state === S.RAFTER_CLIMB || f.state === S.RAFTER || f.state === S.RAFTER_DROP;
     if (scripted || f.hidden) return;
     const pre = { vx: f.vx, vz: f.vz };
     const contact = integrate(f, dt, w.arena);

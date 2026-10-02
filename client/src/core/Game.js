@@ -45,6 +45,7 @@ export class Game {
     this.net = new NetClient();
     this.session = null;
     this.views = new Map();
+    this.gorePieces = [];
     this.inputState = { mx: 0, mz: 0, held: 0, pressed: 0 };
     this.lastT = performance.now();
     this.time = 0;
@@ -82,7 +83,7 @@ export class Game {
     this.screens = new ScreenDirector(this.arena);
     this.entranceDir = new EntranceDirector({
       scene: this.scene, camera: this.camera, audio: this.audio, arena: this.arena,
-      screens: this.screens, commentary: this.commentary, ui: this.ui, views: this.views,
+      screens: this.screens, commentary: this.commentary, ui: this.ui, views: this.views, effects: this.effects,
     });
     this.entranceDir.getSession = () => this.session;
     this.entranceDir.getNet = () => this.net;
@@ -214,6 +215,7 @@ export class Game {
 
   endMatchCleanup() {
     this.entranceDir?.stop();
+    this.clearGore();
     if (this.session) { this.session.dispose?.(); this.session = null; }
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
@@ -385,6 +387,7 @@ export class Game {
       this.arena.update(dt, this.time, loud);
       this.crowd.update(dt, this.time);
       this.effects.update(dt);
+      this.updateGore(dt);
       this.confetti.update(dt, this.time);
       this.announcer.update(dt);
       this.commentators.forEach((c) => c.update(dt));
@@ -414,6 +417,8 @@ export class Game {
     this.referee.update(dt, view.referee);
     this.arena.updateRopes(dt, view.fighters);
     this.arena.updateRingDamage(view.ring);
+    const diver = view.fighters.find((f) => f.state === S.RAFTER || f.state === S.RAFTER_DROP);
+    this.arena.showDropShadow(diver?.x || 0, diver?.z || 0, !!diver);
     const events = this.session.takeEvents();
     this.processEvents(events, byId, view);
     if (!this.session.online) this.commentary.update(dt, events);
@@ -461,7 +466,9 @@ export class Game {
     if (st === S.DOWN || st === S.KNOCKDOWN) return [{ key: 'MASH', text: 'to get up faster' }];
     if (st === S.CORNER_STUN) return [{ key: 'MASH', text: 'to recover' }];
     if (st === S.HOLD) return [{ key: 'J', text: 'Strike' }, { key: 'K', text: 'Slam (S+K: suplex)' }, { key: 'E', text: 'Throw / Irish whip' }, ...(ab?.kind === 'grapple' ? [{ key: 'X', text: ab.name, hot: me.meter >= me.c.specialCost && me.specialCd <= 0 }] : [])];
-    if (st === S.PERCH) return [{ key: 'J / K', text: 'DIVE!', hot: true }, { key: 'F', text: 'Climb down' }];
+    if (st === S.PERCH) return [{ key: 'J / K', text: 'DIVE!', hot: true }, { key: 'SHIFT + F', text: 'Climb to the rafters' }, { key: 'F', text: 'Climb down' }];
+    if (st === S.RAFTER) return [{ key: 'WASD', text: 'Move out over the ring' }, { key: 'F / J', text: 'HIGH DROP!', hot: true }];
+    if (st === S.RAFTER_CLIMB || st === S.RAFTER_DROP) return [];
     if (st === S.CAGE_CLIMB) return [{ key: 'W / S', text: 'Climb' }, { key: 'J', text: 'Dive off!', hot: me.y > 1.2 }, { key: 'F', text: 'Drop' }];
     if (me.itemType) out.push({ key: 'J', text: 'Swing' }, { key: 'K', text: 'Smash' }, { key: 'G', text: 'Throw' }, { key: 'F', text: 'Drop' });
     else {
@@ -484,12 +491,17 @@ export class Game {
           if (!out.length && cd < R.cornerZone + 0.2) out.push({ key: 'F', text: 'Climb turnbuckle' });
           else if (!out.length && gap < 0.9) out.push({ key: 'F', text: 'Roll out of ring' });
         } else if (me.zone === 'floor') {
-          const R = ARENA.ring;
+          const R = ARENA.ring, B = ARENA.barricade, reach = 1.0 + me.c.radius;
           if (view.rules.cage && ARENA.cage.half - Math.max(Math.abs(me.x), Math.abs(me.z)) < 0.9 + me.c.radius) out.push({ key: 'F', text: 'Climb the cell' });
-          else {
+          else if (me.outside) {
+            if (Math.abs(me.x) < B.halfX + reach && Math.abs(me.z) < B.halfZ + reach) out.push({ key: 'F', text: 'Vault back over', hot: true });
+          } else {
             const dx = Math.abs(me.x) - R.apronHalf, dz = Math.abs(me.z) - R.apronHalf;
             const d = dx > 0 && dz > 0 ? Math.hypot(dx, dz) : Math.max(dx, dz);
             if (d < 0.9 + me.c.radius) out.push({ key: 'F', text: 'Enter ring' });
+            const nearBar = (B.halfX - Math.abs(me.x) < reach || B.halfZ - Math.abs(me.z) < reach)
+              && !(me.z > B.halfZ - reach && Math.abs(me.x) < B.gapHalf);
+            if (nearBar) out.push({ key: 'F', text: 'Vault the barricade' });
           }
         }
       }
@@ -582,7 +594,7 @@ export class Game {
         case 'kickout': ui.banner('KICK OUT!', `${name(e.fighter)} survives at ${e.count}`, 1200); C.react('big'); A.crowdPop(1.2); break;
         case 'pin_broken': A.crowdBoo(0.35); break;
         case 'pinfall': ui.pinCount(3); ui.banner('PINFALL!', `${name(e.fighter)} pins ${name(e.victim)}`, 2400); A.crowdPop(1.4); break;
-        case 'ko': ui.banner('K.O.!', name(e.fighter), 2000); C.react('big'); A.crowdPop(1.2); cam.shake(0.4); break;
+        case 'ko': ui.banner('K.O.!', name(e.fighter), 2000); C.react('big'); A.crowdPop(1.2); cam.shake(0.5); this.spawnGore(byId.get(e.fighter)); break;
         case 'elimination': ui.feed(`${name(e.fighter)} has been ELIMINATED`); break;
         case 'bell': A.play('ring_bell', new THREE.Vector3(2.6, 1, -6.3), { times: e.ending ? 3 : 2, volume: 1.2 }); break;
         case 'match_start': ui.banner('FIGHT!', '', 1100); C.react('pop', 0.8); A.crowdPop(1); this.screens.flash('FIGHT!'); break;
@@ -612,6 +624,47 @@ export class Game {
         case 'env_damage': break;
       }
     }
+  }
+
+  /** Cartoonish KO gore: a spray of blood + a couple of limbs flung off. */
+  spawnGore(f) {
+    if (!f || this.settings.get().gore === false) return;
+    const x = f.x, y = (f.y || 0), z = f.z;
+    // exaggerated blood spray
+    for (let i = 0; i < 4; i++) {
+      this.effects.burst({ x, y: y + 0.5 + Math.random() * 0.9, z }, { n: 34, speed: 3 + i, color: [0.72, 0.02, 0.04], size: 0.13, life: 1.0, additive: false, grav: 2.4, up: 2.5 });
+    }
+    // flung limbs (generic skin-tone, stylised)
+    const geos = [new THREE.CapsuleGeometry(0.1, 0.46, 4, 8), new THREE.CapsuleGeometry(0.12, 0.55, 4, 8), new THREE.SphereGeometry(0.19, 10, 8)];
+    const n = 2 + (Math.random() < 0.5 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(geos[i % geos.length], new THREE.MeshStandardMaterial({ color: 0xd8a97a, roughness: 0.85 }));
+      m.position.set(x, y + 0.7 + Math.random() * 0.8, z); m.castShadow = false;
+      this.scene.add(m);
+      const a = Math.random() * Math.PI * 2, sp = 2.5 + Math.random() * 2.5;
+      this.gorePieces.push({ mesh: m, vx: Math.cos(a) * sp, vy: 4.5 + Math.random() * 2.5, vz: Math.sin(a) * sp, spin: (Math.random() - 0.5) * 16, life: 3.2 });
+    }
+    this.audio.crowdBoo?.(0.5);
+  }
+
+  updateGore(dt) {
+    if (!this.gorePieces.length) return;
+    for (const g of this.gorePieces) {
+      g.life -= dt; g.vy -= 15 * dt;
+      g.mesh.position.x += g.vx * dt; g.mesh.position.y += g.vy * dt; g.mesh.position.z += g.vz * dt;
+      g.mesh.rotation.x += g.spin * dt; g.mesh.rotation.y += g.spin * 0.7 * dt;
+      if (g.mesh.position.y < 0.1) { g.mesh.position.y = 0.1; g.vy = Math.abs(g.vy) * 0.3; g.vx *= 0.6; g.vz *= 0.6; } // bounce + blood pool
+    }
+    this.gorePieces = this.gorePieces.filter((g) => {
+      if (g.life > 0) return true;
+      this.scene.remove(g.mesh); g.mesh.geometry.dispose?.(); g.mesh.material.dispose?.();
+      return false;
+    });
+  }
+
+  clearGore() {
+    for (const g of this.gorePieces) { try { this.scene.remove(g.mesh); g.mesh.geometry.dispose?.(); g.mesh.material.dispose?.(); } catch { /* ignore */ } }
+    this.gorePieces = [];
   }
 
   /** Winner moment: confetti, pyro from the ring posts, announcer declares the winner. */
