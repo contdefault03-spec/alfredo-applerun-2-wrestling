@@ -18,7 +18,7 @@ import { CrowdSystem } from '../render/CrowdSystem.js';
 import { FighterView } from '../render/FighterView.js';
 import { ItemViews } from '../render/ItemViews.js';
 import { Effects, Confetti } from '../render/Effects.js';
-import { Referee, Commentator, Announcer } from '../render/NPCs.js';
+import { Referee, Commentator, Announcer, RingGirl } from '../render/NPCs.js';
 import { ScreenDirector } from '../render/ScreenDirector.js';
 import { EntranceDirector } from '../render/EntranceDirector.js';
 import { CameraSystem } from '../camera/CameraSystem.js';
@@ -225,8 +225,11 @@ export class Game {
 
   endMatchCleanup() {
     this.entranceDir?.stop();
+    this._winnerMedia = false; this.entranceDir?.stopWinner();
     this.clearGore();
+    this.restoreReferee();
     this.setRingGirls(false);
+    this.arena?.resetRingDamage?.();
     if (this.session) { this.session.dispose?.(); this.session = null; }
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
@@ -263,6 +266,7 @@ export class Game {
   showResults(info) {
     if (this.resultsShown) return;
     this.resultsShown = true;
+    this._winnerMedia = false; this.entranceDir?.stopWinner();
     this.input.enabled = false;
     if (document.pointerLockElement) document.exitPointerLock?.();
     const view = this.session.view();
@@ -402,6 +406,7 @@ export class Game {
       this.confetti.update(dt, this.time);
       this.announcer.update(dt);
       this.commentators.forEach((c) => c.update(dt));
+      this.updateRingGirls(dt);
       this.screens.update(dt, this.time, this.session?.view?.());
       const cam = this.renderer.camera;
       this.audio.setListener(cam.position, cam.getWorldDirection(new THREE.Vector3()));
@@ -430,6 +435,7 @@ export class Game {
     this.arena.updateRingDamage(view.ring);
     this.arena.setCageDoor(view.cageDoor);
     this.setRingGirls(['entrances', 'finished', 'over'].includes(view.match.phase));
+    if (this._winnerMedia && ['finished', 'over'].includes(view.match.phase)) this.entranceDir?.drawWinner();
     // slam/crash into a parked car → windshield shatters (glass + blood)
     for (const f of view.fighters) {
       if (!f.outside || f.hidden) continue;
@@ -556,6 +562,7 @@ export class Game {
           if (e.heavy) { cam.punch(e.special ? 6 : 2.5); this.renderer.impactFlash(e.special ? 0.35 : 0.12); }
           C.react('pop', e.crowd ?? 0.1); A.crowdPop((e.crowd ?? 0.1) * 0.8);
           if (p && (involved(e) || e.heavy)) this.damageNumber(p, e.damage);
+          if (p && e.damage >= 70 && this.settings.get().gore !== false) this.bloodHit(p, Math.min(1.5, e.damage / 90)); // hurt badly → blood
           break;
         }
         case 'block': A.play('block', p); E.burst(p, { n: 6, speed: 2, color: [0.6, 0.8, 1], size: 0.06, life: 0.2 }); break;
@@ -653,59 +660,107 @@ export class Game {
         case 'irish_whip': { const f = byId.get(e.fighter); if (f) A.play('grunt', new THREE.Vector3(f.x, f.y + 1.5, f.z), { pitch: f.c.voicePitch }); break; }
         case 'throw': A.play('whoosh', p, { volume: 1 }); C.react('pop', 0.4); break;
         case 'env_damage': break;
+        // ── referee interference / grab-the-ref ──
+        case 'ref_warn': { ui.feed('The referee is warning ' + name(e.fighter) + '!'); C.react('pop', 0.3); break; }
+        case 'ref_block': { const rp = this.refPos(view); A.play('block', rp, { volume: 0.9 }); cam.shake(0.12); C.react('pop', 0.4); A.crowdPop(0.4); ui.feed('The ref breaks it up!'); break; }
+        case 'ref_grab': { const rp = this.refPos(view); A.play('grunt', rp, { volume: 1 }); C.react('pop', 0.5); A.crowdPop(0.6); ui.feed('Grabbing the referee!'); break; }
+        case 'ref_grabbed': {
+          const rp = this.refPos(view);
+          A.play('slam', rp, { volume: 1.3 }); A.play('bodyfall', rp, { volume: 1.1 });
+          cam.shake(0.5); cam.punch(4); C.react('big'); A.crowdPop(1.1);
+          E.burst(rp, { n: 16, speed: 3, color: [0.55, 0.45, 0.3], size: 0.1, life: 0.7, grav: 1.6 });
+          ui.feed('SLAMS the referee down!');
+          if (e.count >= 2 && this.settings.get().gore !== false) this.bloodHit(rp, 0.9);
+          break;
+        }
+        case 'ref_dead': { ui.banner('THE REF IS DOWN!', 'No count — anything goes', 2200); cam.shake(0.6); A.crowdBoo(0.6); this.refGore(); break; }
+        case 'ref_recover': { ui.feed('The referee is back on his feet'); break; }
       }
     }
   }
 
-  /** Windshield smash: glass shards + blood at the car. */
+  /** The referee gets torn up (same stylized gore as a fighter KO), on his own model. */
+  refGore() {
+    const ref = this.referee;
+    if (!ref || this.settings.get().gore === false) return;
+    const rp = new THREE.Vector3(); ref.root.getWorldPosition(rp);
+    for (let i = 0; i < 4; i++) this.effects.burst({ x: rp.x, y: rp.y + 0.4 + Math.random(), z: rp.z }, { n: 36, speed: 3 + i, color: [0.72, 0.02, 0.04], size: 0.14, life: 1.1, grav: 2.4, up: 2.4 });
+    this.bloodDecal(rp.x, rp.z, 1.3); this.bloodDecal(rp.x, rp.z, 0.9);
+    const bones = ref.solver?.b;
+    if (bones) {
+      ref._severed = ref._severed || {};
+      const choices = ['lowerArm_R', 'lowerArm_L', 'lowerLeg_R', 'lowerLeg_L'];
+      const avail = choices.filter((n) => bones[n] && !ref._severed[n]);
+      if (avail.length) {
+        const bn = avail[Math.floor(Math.random() * avail.length)];
+        const bone = bones[bn];
+        const wpos = bone.getWorldPosition(new THREE.Vector3());
+        bone.scale.setScalar(0.0001); ref._severed[bn] = true;
+        const piece = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.46, 4, 8), new THREE.MeshStandardMaterial({ color: 0xd8a97a, roughness: 0.85 }));
+        piece.position.copy(wpos); this.scene.add(piece);
+        const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 2.5;
+        this.gorePieces.push({ mesh: piece, vx: Math.cos(a) * sp, vy: 3.5 + Math.random() * 2, vz: Math.sin(a) * sp, spin: (Math.random() - 0.5) * 14, landed: false });
+      }
+    }
+    this.audio.crowdBoo?.(0.5);
+  }
+
+  /** Windshield smash: real glass shards fly off + blood + crack the pane. */
   carCrashFX(car) {
     const p = new THREE.Vector3(car.pane ? car.pane.position.x : car.x, car.pane ? car.pane.position.y : 1.2, car.pane ? car.pane.position.z : car.z);
-    this.effects.burst(p, { n: 46, speed: 5, color: [0.78, 0.92, 1], size: 0.06, life: 1.1, additive: false, grav: 2.2, up: 1.5 }); // glass
-    this.effects.burst(p, { n: 20, speed: 3, color: [0.72, 0.02, 0.04], size: 0.1, life: 1.2, additive: false, grav: 2.4, up: 1 }); // blood
+    this.effects.burst(p, { n: 40, speed: 5, color: [0.82, 0.93, 1], size: 0.05, life: 1.0, additive: true, grav: 2.2, up: 1.5 });      // glass glint
+    this.effects.burst(p, { n: 18, speed: 3, color: [0.72, 0.02, 0.04], size: 0.1, life: 1.2, additive: false, grav: 2.4, up: 1 });       // blood
+    // physical glass shards that fly and fall
+    const shardMat = new THREE.MeshStandardMaterial({ color: 0xbfe0ef, transparent: true, opacity: 0.6, roughness: 0.1, metalness: 0.3 });
+    for (let i = 0; i < 12; i++) {
+      const s = new THREE.Mesh(new THREE.TetrahedronGeometry(0.06 + Math.random() * 0.06), shardMat);
+      s.position.copy(p); this.scene.add(s);
+      const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 3;
+      this.gorePieces.push({ mesh: s, vx: Math.cos(a) * sp, vy: 2 + Math.random() * 2.5, vz: Math.sin(a) * sp - 2, spin: (Math.random() - 0.5) * 20, landed: false });
+    }
     this.audio.play('metal', p, { volume: 1.3 });
     this.audio.crowdPop?.(1.1);
     this.camera.shake(0.5);
   }
 
-  /** Replace a procedural NPC's look with a GLB model (same behavior/position). */
+  /** Give a procedural NPC a GLB body, re-rigged so it still animates (no T-pose). */
   skinNPC(npc, src) {
-    if (!npc || !src) return;
-    const m = src.clone(true);
-    const box = new THREE.Box3().setFromObject(m);
-    const h = Math.max(0.1, box.max.y - box.min.y);
-    const sc = (npc.scale || 1.78) / h;
-    m.scale.setScalar(sc);
-    m.position.y = -box.min.y * sc;
-    m.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-    npc.root.add(m);
-    if (npc.pivot) npc.pivot.visible = false; // hide the procedural body
-    npc._glb = m;
+    if (!npc || !src || typeof npc.setModel !== 'function') return;
+    try { npc._glb = npc.setModel(src.clone(true)); } catch (e) { console.warn('skinNPC failed', e); }
   }
 
-  /** Ring girls (girl.glb) around ringside – shown for entrances + after the bell. */
+  /** Ring girls (girl.glb) around ringside – rigged so they walk, wave & applaud. */
   buildRingGirls() {
     const src = this.assets.props?.girl; if (!src) return;
     this.ringGirls = [];
-    // normalise to ~1.7 m tall
-    const box = new THREE.Box3().setFromObject(src);
-    const h = Math.max(0.1, box.max.y - box.min.y);
-    const scale = 1.7 / h;
-    const spots = [[-4.6, 0, 4.6], [4.6, 0, 4.6], [-4.6, 0, -4.6], [4.6, 0, -4.6]];
-    for (const [x, y, z] of spots) {
-      const g = src.clone(true);
-      g.scale.setScalar(scale);
-      g.position.set(x, y, z);
-      g.rotation.y = Math.atan2(-x, -z); // face the ring
-      g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-      g.visible = false;
-      this.scene.add(g);
+    const spots = [[-4.6, 4.6], [4.6, 4.6], [-4.6, -4.6], [4.6, -4.6]];
+    const shirts = ['#d81b60', '#8e24aa', '#00897b', '#f4511e'];
+    spots.forEach(([x, z], i) => {
+      const g = new RingGirl(this.scene, { x, z }, shirts[i]);
+      try { g.setModel(src.clone(true)); } catch (e) { console.warn('ring girl rig failed', e); }
       this.ringGirls.push(g);
-    }
+    });
   }
 
   setRingGirls(show) {
     if (!this.ringGirls) return;
-    for (const g of this.ringGirls) g.visible = show;
+    for (const g of this.ringGirls) g.root.visible = show;
+  }
+
+  updateRingGirls(dt) {
+    if (!this.ringGirls) return;
+    for (const g of this.ringGirls) g.update(dt);
+  }
+
+  /** Winner announced: the girls cheer, and the nearest one walks over to the champ. */
+  ringGirlsCelebrate(champ) {
+    if (!this.ringGirls) return;
+    for (const g of this.ringGirls) g.applaud(6);
+    if (champ) {
+      let best = null, bd = Infinity;
+      for (const g of this.ringGirls) { const d = Math.hypot(g.pos.x - champ.x, g.pos.z - champ.z); if (d < bd) { bd = d; best = g; } }
+      best?.toWinner(champ.x, champ.z);
+    }
   }
 
   /** A red blood splat that stays on the ground (or any surface). */
@@ -716,6 +771,12 @@ export class Game {
     m.rotation.y = Math.random() * Math.PI; m.renderOrder = 1;
     this.scene.add(m); this.bloodDecals.push(m);
     if (this.bloodDecals.length > 80) { const old = this.bloodDecals.shift(); this.scene.remove(old); old.geometry.dispose?.(); old.material.dispose?.(); }
+  }
+
+  /** Blood spray from a hard hit (no dismemberment) + an occasional floor splat. */
+  bloodHit(p, amount = 1) {
+    this.effects.burst({ x: p.x, y: p.y, z: p.z }, { n: Math.round(14 * amount), speed: 2.5 * amount, color: [0.72, 0.02, 0.04], size: 0.11, life: 0.7, additive: false, grav: 2.4, up: 1.6 });
+    if (Math.random() < 0.5) this.bloodDecal(p.x, p.z, 0.5 * amount);
   }
 
   /** KO gore: blood that splatters + stays, and an actual limb torn off the body. */
@@ -748,6 +809,15 @@ export class Game {
     this.audio.crowdBoo?.(0.5);
   }
 
+  /** Un-sever the referee's limbs so he's whole again for the next match. */
+  restoreReferee() {
+    const ref = this.referee;
+    if (!ref?._severed) return;
+    const bones = ref.solver?.b;
+    if (bones) for (const n of Object.keys(ref._severed)) { if (bones[n]) bones[n].scale.setScalar(1); }
+    ref._severed = {};
+  }
+
   updateGore(dt) {
     if (!this.gorePieces.length) return;
     for (const g of this.gorePieces) {
@@ -770,6 +840,10 @@ export class Game {
   celebrationFX(e, byId, view) {
     this.confetti.start(10);
     const R = ARENA.ring;
+    // winner's song + video on the titantron, both looping through the celebration
+    const champ = (e.winners || []).map((id) => byId.get(id)).filter(Boolean)[0];
+    if (champ) { this._winnerMedia = true; this.entranceDir?.startWinner(champ.charId); }
+    this.ringGirlsCelebrate(champ);
     [[1, 1], [-1, 1], [-1, -1], [1, -1]].forEach(([sx, sz], i) => setTimeout(() => {
       const p = new THREE.Vector3(sx * R.postInset, R.height + R.postHeight + 0.1, sz * R.postInset);
       for (let k = 0; k < 4; k++) setTimeout(() => this.effects.burst(p, { n: 40, speed: 6, color: [1, 0.75, 0.3], size: 0.07, life: 0.9, grav: 0.8, up: 2.5 }), k * 140);

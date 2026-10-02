@@ -69,6 +69,30 @@ class Human {
     this.phase = 0; this.time = Math.random() * 5;
     this.legLenM = this.solver.legLen * height;
   }
+  /**
+   * Replace the procedural body with a GLB model, re-rigged onto the SAME pose
+   * skeleton so all existing animation (walk/turn/count/gesture) still drives it
+   * (no T-pose). Call once after load.
+   */
+  setModel(src) {
+    let mesh = null; src.updateMatrixWorld(true);
+    src.traverse((o) => { if ((o.isMesh || o.isSkinnedMesh) && !mesh) mesh = o; });
+    if (!mesh) return false;
+    const rig = autoRig(mesh, RIG);
+    const topY = rig.joints?.headTop?.y || 1;
+    const sc = this.scale / topY;             // normalise the GLB to the NPC height
+    if (this._rigMesh) this.pivot.remove(this._rigMesh);
+    rig.mesh.scale.setScalar(sc);
+    this.pelvisH = (rig.joints?.hips?.y || 0.52) * sc;
+    rig.mesh.position.y = -this.pelvisH;
+    rig.mesh.frustumCulled = false;
+    this.pivot.add(rig.mesh);
+    this.solver = new PoseSolver(rig);
+    this.legLenM = this.solver.legLen * sc;
+    this._rigMesh = rig.mesh;
+    return true;
+  }
+
   walk(t, speed, dt) {
     this.phase = (this.phase + speed * dt / (this.legLenM * 1.4)) % 1;
     const m = Math.min(1, speed / 0.6), ph = this.phase * Math.PI * 2;
@@ -122,6 +146,25 @@ export class Referee extends Human {
       case 'raise':
         applyOverrides(t, RELAXED); set(t, 'handR', [0.35, 1.05, 0.05]); set(t, 'handL', [0.2, -0.5, 0.3]);
         break;
+      case 'warn':
+        // marching in, wagging a finger at the offender
+        applyOverrides(t, RELAXED, { hipsOff: [0, -0.06, 0], spine: [0.18, 0, 0] });
+        set(t, 'handR', [0.2, 0.75 + 0.15 * Math.sin(this.time * 12), 0.35]); set(t, 'handL', [0.12, -0.55, 0.25]);
+        this.walk(t, speed, dt);
+        break;
+      case 'grabbed': {
+        // hoisted off the mat, body limp — arms and head dangling
+        const sw = Math.sin(this.time * 6) * 0.12;
+        applyOverrides(t, RELAXED, { hipsOff: [0, -0.1, 0], spine: [0.35, sw, 0], chest: [0.25, 0, 0], head: [0.5, sw, 0],
+          handL: [-0.1, -0.95, 0.1], handR: [-0.1, -0.95, 0.1], footL: [0.05, -0.2, -0.15], footR: [0.05, -0.2, 0.15], kneeL: [0, -0.1, 0.4], kneeR: [0, -0.1, 0.4] });
+        break;
+      }
+      case 'down':
+        // flat on his back on the canvas, out cold
+        applyOverrides(t, RELAXED, { hipsOff: [0, -0.62, 0], spine: [0, 0, 0], chest: [-0.1, 0, 0], head: [0.2, 0.3, 0],
+          footL: [0.35, 0, -0.5], footR: [0.35, 0, -0.5], kneeL: [0, 0.1, 0.2], kneeR: [0, -0.1, 0.2],
+          handL: [0.1, -0.2, -0.9], handR: [0.1, -0.2, -0.9] });
+        break;
       default:
         applyOverrides(t, RELAXED, { hipsOff: [0, -0.08, 0], spine: [0.22, 0, 0], handL: [0.12, -0.6, 0.25], handR: [0.12, -0.6, 0.25] });
         this.walk(t, speed, dt);
@@ -160,6 +203,72 @@ export class Commentator extends Human {
       add(t, 'head', [0, Math.sin(this.time * 0.5) * 0.25, 0]);
     }
     this.solve(dt, 12);
+  }
+}
+
+/**
+ * Ring-side valet (girl.glb): strolls around her corner, waves/salutes the
+ * crowd, applauds when a winner is announced, and can walk over to the champ
+ * to blow a kiss. Same rig pipeline as the ref/announcer, so no T-pose.
+ */
+export class RingGirl extends Human {
+  constructor(scene, home, shirt = '#d81b60') {
+    super(atlas([shirt, '#e8b48a', '#20202a', '#101016', '#2a1a0f', '#ffd24a']), 1.7);
+    scene.add(this.root);
+    this.home = { x: home.x, z: home.z };
+    this.pos = new THREE.Vector3(home.x, 0, home.z);
+    this.target = new THREE.Vector3(home.x, 0, home.z);
+    this.yaw = Math.atan2(-home.x, -home.z);
+    this.prevPos = this.pos.clone();
+    this.applaudT = 0; this.kissT = 0; this.patrolT = Math.random() * 3;
+    this.root.visible = false;
+  }
+  applaud(sec = 4) { this.applaudT = Math.max(this.applaudT, sec); }
+  /** Walk over toward the champion (x,z) and blow a kiss. */
+  toWinner(x, z) { this.target.set(x + (this.home.x > 0 ? 1.6 : -1.6), 0, z + 1.4); this.kissT = 6; this.patrolT = 6; }
+  pickPatrol() {
+    const r = 1.5;
+    this.target.set(this.home.x + (Math.random() - 0.5) * r, 0, this.home.z + (Math.random() - 0.5) * r);
+  }
+  update(dt) {
+    if (!this.root.visible) return;
+    this.time += dt;
+    this.applaudT = Math.max(0, this.applaudT - dt);
+    this.kissT = Math.max(0, this.kissT - dt);
+    this.patrolT -= dt;
+    const d = Math.hypot(this.target.x - this.pos.x, this.target.z - this.pos.z);
+    if (this.patrolT <= 0 && d < 0.12 && this.applaudT <= 0 && this.kissT <= 0) { this.pickPatrol(); this.patrolT = 2.5 + Math.random() * 3; }
+    const step = Math.min(d, (this.kissT > 0 ? 2.0 : 1.3) * dt);
+    if (d > 0.06) {
+      this.pos.x += (this.target.x - this.pos.x) / d * step; this.pos.z += (this.target.z - this.pos.z) / d * step;
+      this.yaw = Math.atan2(this.target.x - this.pos.x, this.target.z - this.pos.z);
+    } else {
+      const toRing = Math.atan2(-this.pos.x, -this.pos.z);
+      this.yaw += (toRing - this.yaw) * Math.min(1, dt * 3);
+    }
+    const speed = this.prevPos.distanceTo(this.pos) / Math.max(dt, 1e-3); this.prevPos.copy(this.pos);
+    this.root.position.copy(this.pos); this.root.rotation.y = this.yaw;
+    const t = this.tgt;
+    if (this.kissT > 0 && d < 0.3) {              // blow a kiss to the champ
+      applyOverrides(t, RELAXED);
+      const k = Math.max(0, Math.sin(this.time * 3));
+      set(t, 'handR', [-0.1, 0.5 + 0.3 * k, 0.4]); set(t, 'elbowR', [0.9, -0.5, 0]);
+      set(t, 'head', [-0.1, 0, 0]); set(t, 'chest', [-0.1, 0, 0]);
+    } else if (this.applaudT > 0) {               // applaud the winner
+      applyOverrides(t, RELAXED);
+      const c = Math.sin(this.time * 14) * 0.18;
+      set(t, 'handL', [0.3, 0.12, 0.5 + c]); set(t, 'handR', [0.3, 0.12, 0.5 - c]);
+      set(t, 'elbowL', [0.5, -0.6, 0]); set(t, 'elbowR', [0.5, -0.6, 0]); set(t, 'head', [-0.12, 0, 0]);
+    } else if (speed > 0.3) {                      // strolling
+      applyOverrides(t, RELAXED, { spine: [0.08, 0, 0] });
+      this.walk(t, speed, dt);
+    } else {                                       // wave / salute the crowd
+      applyOverrides(t, RELAXED);
+      const wv = Math.sin(this.time * 5);
+      set(t, 'handR', [0.1, 0.75 + 0.2 * wv, 0.2]); set(t, 'elbowR', [0.3, -0.2, 0]);
+      add(t, 'head', [0, 0.2 * Math.sin(this.time * 1.5), 0]);
+    }
+    this.solve(dt, 14);
   }
 }
 

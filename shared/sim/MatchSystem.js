@@ -24,7 +24,7 @@ export class MatchSystem {
     this.pin = null;
     this.winnerTeam = null; this.winners = []; this.method = null;
     this.elimOrder = [];
-    this.referee = { x: 0, y: R.height, z: -1.5, yaw: 0, zone: ZONE.RING, state: 'watch', count: 0, t: 0, focus: null, warnTarget: null, warnT: 0, downT: 0, grabCount: 0, dead: false };
+    this.referee = { x: 0, y: R.height, z: -1.5, yaw: 0, zone: ZONE.RING, state: 'watch', count: 0, t: 0, focus: null, warnTarget: null, warnT: 0, downT: 0, grabCount: 0, dead: false, grabbedBy: null, grabT: 0 };
     // ── entrance state (authoritative; mirrored to clients in the snapshot) ──
     this.entranceOrder = [];      // fighter ids, in entry order
     this.entranceIndex = -1;      // -1 = not started yet
@@ -348,10 +348,10 @@ export class MatchSystem {
       w.combat.applyHit(f, v, { damage: dmg, reaction: 'knockdown', knockback: 3, unblockable: true, sound: 'impact', move: 'high_drop', moveName: 'High Drop', special: true, crowd: 1 });
       hit++;
     }
-    // the ring takes extreme damage where they land (breaks an already-cracked section)
-    if (w.arena.isInsideRingSquare(x, z, -0.2)) { w.ring.registerImpact(x, z); w.ring.registerImpact(x, z); }
-    // the diver: safe-ish on a hit, hurt on a miss
-    setState(f, S.DOWN); f.downTimer = hit ? 1.0 : 1.8; f.mash = 0;
+    // a drop from the rafters ALWAYS smashes the ring open where they land
+    if (w.arena.isInsideRingSquare(x, z, -0.2)) w.ring.breakChance(x, z, 1);
+    // the diver: safe-ish on a hit, hurt on a miss; lands beside the hole (brief fall immunity)
+    setState(f, S.DOWN); f.downTimer = hit ? 1.0 : 1.8; f.mash = 0; f.noFall = (f.downTimer || 1) + 0.5;
     if (!hit) w.combat.applyEnvDamage(f, HIGH_DROP_SELF, 'high_drop_miss');
     w.emit('high_drop', { fighter: f.id, x, z, radius: HIGH_DROP_RADIUS, hits: hit });
   }
@@ -393,11 +393,10 @@ export class MatchSystem {
     const f = w.byId(fighterId);
     if (!f || !isAlive(f) || f.hidden) return false;
     if (Math.hypot(ref.x - f.x, ref.z - f.z) > REF_GRAB_RANGE) return false;
-    ref.state = 'down'; ref.downT = REF_DOWN_TIME; ref.warnTarget = null; ref.blocked = false;
-    ref.grabCount = (ref.grabCount || 0) + 1;
+    // grab + lift first; the slam happens after a short hold (see updateReferee)
+    ref.state = 'grabbed'; ref.grabbedBy = fighterId; ref.grabT = 0.85; ref.warnTarget = null; ref.blocked = false;
     f.refHeat = 0;
-    w.emit('ref_grabbed', { fighter: fighterId, count: ref.grabCount });
-    if (ref.grabCount >= REF_DEATHS) { ref.dead = true; w.emit('ref_dead', { by: fighterId }); } // out for the rest of the match
+    w.emit('ref_grab', { fighter: fighterId });
     return true;
   }
 
@@ -413,6 +412,23 @@ export class MatchSystem {
     const w = this.world, ref = this.referee;
     ref.t += dt;
     // knocked down after being grabbed – out of the match for a few seconds
+    if (ref.state === 'grabbed') {
+      // held + lifted in front of the grabber, then slammed down
+      ref.grabT -= dt;
+      const by = w.byId(ref.grabbedBy);
+      if (!by || !isAlive(by)) { ref.state = 'watch'; ref.grabbedBy = null; return; }
+      const fw = { x: Math.sin(by.yaw), z: Math.cos(by.yaw) };
+      ref.x = by.x + fw.x * 0.7; ref.z = by.z + fw.z * 0.7;
+      ref.y += ((by.y + 1.1) - ref.y) * Math.min(1, dt * 8); // lifted
+      ref.yaw = by.yaw + Math.PI;
+      if (ref.grabT <= 0) {               // slam!
+        ref.state = 'down'; ref.downT = REF_DOWN_TIME;
+        ref.grabCount = (ref.grabCount || 0) + 1; ref.grabbedBy = null;
+        w.emit('ref_grabbed', { fighter: by.id, count: ref.grabCount });
+        if (ref.grabCount >= REF_DEATHS) { ref.dead = true; w.emit('ref_dead', { by: by.id }); }
+      }
+      return;
+    }
     if (ref.state === 'down') {
       ref.downT -= dt;
       ref.y += ((w.arena.isInsideRingSquare(ref.x, ref.z) ? R.height : 0) - ref.y) * Math.min(1, dt * 6);

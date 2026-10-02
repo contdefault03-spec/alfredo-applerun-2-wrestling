@@ -75,9 +75,10 @@ export class RingDestruction {
     if (this.world.match.phase !== 'live') return;
     for (const f of this.world.fighters) {
       if (f.hidden || f.eliminated) continue;
+      if (f.noFall > 0) f.noFall -= dt;                 // brief immunity (e.g. the diver who just broke it)
       if (f.underRing) { this.manageFallen(f, dt); continue; }
       if (!f.onGround || f.zone !== 'ring' || NO_FALL.has(f.state)) continue;
-      if (this.isBroken(f.x, f.z)) this.startFall(f);
+      if ((f.noFall || 0) <= 0 && this.isBroken(f.x, f.z)) this.startFall(f);
     }
   }
 

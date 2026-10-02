@@ -35,6 +35,14 @@ const simWait = async (p, secs) => { const t0 = await p.evaluate(() => window.__
 {
   const p = await page();
   await p.goto(URL + '/?autostart=1&char=rise&opp=masked&diff=easy');
+  // headless rAF is throttled, so the entrance phase can't tick through in real time –
+  // advance it by hand (server-authoritative) and run the intro to the live bell.
+  await p.waitForFunction("window.__game?.session?.world?.match", null, { timeout: 180000 });
+  await p.evaluate(() => {
+    const w = window.__game.session.world, m = w.match;
+    let g = 0; while (m.phase === 'entrances' && g++ < 10) m.advanceEntrance();
+    for (let i = 0; i < 400 && m.phase !== 'live'; i++) w.step();
+  });
   await p.waitForFunction("window.__game?.session?.world?.match?.phase === 'live'", null, { timeout: 180000 });
   await p.evaluate(() => { const w = window.__game.session.world; const op = w.byId(2); op.isAI = false; op.input.mx = op.input.mz = 0; });
   const place = () => p.evaluate(() => { const w = window.__game.session.world; const me = w.byId(1), op = w.byId(2); op.x = me.x + Math.sin(me.yaw); op.z = me.z + Math.cos(me.yaw); op.state = 'idle'; op.vx = op.vz = 0; });
@@ -55,11 +63,17 @@ const simWait = async (p, secs) => { const t0 = await p.evaluate(() => window.__
 {
   const p = await page();
   await p.goto(URL + '/?autostart=1&char=ajan&opp=lucky&diff=easy');
+  await p.waitForFunction("window.__game?.session?.world?.match", null, { timeout: 180000 });
+  await p.evaluate(() => {
+    const w = window.__game.session.world, m = w.match;
+    let g = 0; while (m.phase === 'entrances' && g++ < 10) m.advanceEntrance();
+    for (let i = 0; i < 400 && m.phase !== 'live'; i++) w.step();
+  });
   await p.waitForFunction("window.__game?.session?.world?.match?.phase === 'live'", null, { timeout: 180000 });
   await p.keyboard.press('KeyH'); // user gesture → unlock audio
-  await p.evaluate(() => { const w = window.__game.session.world; const me = w.byId(1), op = w.byId(2); me.meter = 100; op.isAI = false; op.input.mx = op.input.mz = 0; op.x = me.x + 4; op.z = me.z + 1; op.state = 'idle'; });
+  await p.evaluate(() => { const w = window.__game.session.world; const me = w.byId(1), op = w.byId(2); me.meter = 100; op.isAI = false; op.input.mx = op.input.mz = 0; op.x = me.x + 1.6; op.z = me.z; op.state = 'idle'; me.yaw = Math.atan2(op.x - me.x, op.z - me.z); });
   await p.keyboard.press('KeyX');
-  await simWait(p, 2.2);
+  await simWait(p, 3.2);
   await p.waitForTimeout(500);
   const r = await p.evaluate(() => ({ hp: window.__game.session.world.byId(2).hp, sample: window.__audioLog.find((l) => l.name === 'sample:Ajan.mp3') }));
   check(r.hp < 500, `Ajan crush deals massive damage (Lucky hp ${r.hp})`);
@@ -75,12 +89,15 @@ const simWait = async (p, secs) => { const t0 = await p.evaluate(() => window.__
   await A.waitForFunction(() => document.querySelector('#rc')?.textContent?.length === 5, null, { timeout: 20000 });
   const code = await A.textContent('#rc');
   check(/^[A-Z2-9]{5}$/.test(code), `room code ${code}`);
-  await B.goto(URL + '/?room=' + code);
+  await B.goto(URL + '/?room=' + code, { timeout: 180000 });
   await B.waitForFunction("window.__game?.state === 'friend'", null, { timeout: 180000 });
   await B.click('[data-a=join]');
   await B.waitForFunction("window.__game?.state === 'lobby'", null, { timeout: 20000 });
   await A.waitForFunction(() => document.querySelectorAll('#slots .slot').length === 2, null, { timeout: 10000 });
   await A.click('[data-a=start]');
+  // entrances are server-authoritative online – both humans vote-skip with J
+  await Promise.all([A, B].map((p) => p.waitForFunction("['entrances','intro','live'].includes(window.__game?.session?.match?.phase)", null, { timeout: 60000 })));
+  for (let i = 0; i < 8; i++) { await A.keyboard.press('KeyJ'); await B.keyboard.press('KeyJ'); await A.waitForTimeout(400); }
   await Promise.all([A, B].map((p) => p.waitForFunction("window.__game?.session?.match?.phase === 'live'", null, { timeout: 60000 })));
   await A.keyboard.down('KeyW'); await A.waitForTimeout(1500); await A.keyboard.up('KeyW'); await A.waitForTimeout(1200);
   const pos = (p) => p.evaluate(() => { const f = window.__game.session.view().fighters.find((x) => x.charId === 'ajan'); return [f.x, f.z]; });

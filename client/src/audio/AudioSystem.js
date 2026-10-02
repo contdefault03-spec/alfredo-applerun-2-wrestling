@@ -251,12 +251,12 @@ export class AudioSystem {
    * don't block). Routed through the music bus when Web Audio is up so master/
    * music volume and compression apply. Returns a handle with stop().
    */
-  playEntranceSong(url) {
+  playEntranceSong(url, { loop = false } = {}) {
     let el;
     try {
       el = new Audio(url);
       el.crossOrigin = 'anonymous';
-      el.loop = false;
+      el.loop = !!loop;
       const s = this.settings.get();
       el.volume = Math.max(0, Math.min(1, (s.musicVolume ?? 0.6) * (s.masterVolume ?? 1)));
       if (this.ctx && this.music) {

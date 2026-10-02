@@ -213,7 +213,8 @@ export class ArenaView {
    * @param {object} assets AssetManager (props already loaded)
    */
   placeCars(assets) {
-    const specs = [{ id: 'car1', x: -7.8, z: 13.6, rot: 0.3 }, { id: 'car2', x: 8.0, z: 14.3, rot: -0.35 }];
+    const E = ARENA.entrance, stageZ = E.zEnd + 2;
+    const specs = [{ id: 'car1', x: -6.5, z: 12.5 }, { id: 'car2', x: 6.8, z: 12.8 }];
     this.cars = [];
     for (const s of specs) {
       const src = assets.props?.[s.id]; if (!src) continue;
@@ -223,17 +224,18 @@ export class ArenaView {
       const scale = 4.3 / len;                                   // ~4.3 m long
       car.scale.setScalar(scale);
       car.position.set(s.x, -box.min.y * scale, s.z);
-      car.rotation.y = s.rot;
+      car.rotation.y = Math.atan2(-s.x, stageZ - s.z);           // face the stage/entrance
       car.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
       this.group.add(car);
-      // a windshield pane (breakable) sitting on the car
-      const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9),
-        new THREE.MeshStandardMaterial({ color: 0x9fd0e6, transparent: true, opacity: 0.4, roughness: 0.1, metalness: 0.3, side: THREE.DoubleSide }));
+      // a windshield pane (breakable) sitting on the car, tilted, facing the stage
+      const rotY = car.rotation.y;
+      const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.85),
+        new THREE.MeshStandardMaterial({ color: 0x9fd0e6, transparent: true, opacity: 0.45, roughness: 0.1, metalness: 0.3, side: THREE.DoubleSide }));
       const b2 = new THREE.Box3().setFromObject(car);
-      pane.position.set(s.x, (b2.max.y - b2.min.y) * 0.62, s.z);
-      pane.rotation.set(-0.9, s.rot, 0);
+      pane.position.set(s.x + Math.sin(rotY) * 0.6, (b2.max.y - b2.min.y) * 0.6, s.z + Math.cos(rotY) * 0.6);
+      pane.rotation.set(-0.9, rotY, 0);
       this.group.add(pane);
-      this.cars.push({ group: car, pane, x: s.x, z: s.z, broken: false });
+      this.cars.push({ group: car, pane, x: s.x, z: s.z, rotY, broken: false });
     }
   }
 
@@ -272,24 +274,57 @@ export class ArenaView {
     }
   }
 
-  /** Splintered wooden planks + broken boards strewn around a collapsed section. */
+  /** Layered collapsed section: dark pit, torn tilted canvas, exposed wood beams + planks. */
   spawnRingDebris(k) {
     this._debris = this._debris || {};
     if (this._debris[k]) return;
     const c = cellCenter(k);
-    const grp = new THREE.Group(); grp.position.set(c.x, R.height - 0.05, c.z);
+    const grp = new THREE.Group(); grp.position.set(c.x, R.height, c.z);
     const plankMat = std({ color: 0x5a3d22, roughness: 0.95 });
-    const darkMat = std({ color: 0x1a1510, roughness: 1 });
-    // a sunken dark pit floor under the hole
-    const pit = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.92, CELL * 0.92).rotateX(-Math.PI / 2), darkMat);
-    pit.position.y = -R.height + 0.02; grp.add(pit);
-    for (let i = 0; i < 9; i++) {
-      const pl = new THREE.Mesh(new THREE.BoxGeometry(0.1 + Math.random() * 0.12, 0.06, 0.55 + Math.random() * 0.6), plankMat);
-      pl.position.set((Math.random() - 0.5) * CELL * 0.8, Math.random() * 0.16, (Math.random() - 0.5) * CELL * 0.8);
-      pl.rotation.set((Math.random() - 0.5) * 0.7, Math.random() * Math.PI, (Math.random() - 0.5) * 0.6);
+    const beamMat = std({ color: 0x3f2c18, roughness: 1 });
+    const darkMat = std({ color: 0x100c08, roughness: 1 });
+    const canvasMat = std({ color: 0xcfd2d6, roughness: 0.9 });
+    // sunken dark pit floor
+    const pit = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.98, CELL * 0.98).rotateX(-Math.PI / 2), darkMat);
+    pit.position.y = -1.5; grp.add(pit);
+    // exposed support beams across the gap (tilted, broken)
+    for (let i = 0; i < 2; i++) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(CELL * 0.9, 0.1, 0.14), beamMat);
+      beam.position.set((Math.random() - 0.5) * 0.3, -0.35 - i * 0.2, (i - 0.5) * CELL * 0.5);
+      beam.rotation.set((Math.random() - 0.5) * 0.4, Math.random() * 0.5, (Math.random() - 0.5) * 0.5);
+      beam.castShadow = true; grp.add(beam);
+    }
+    // torn canvas flaps folding down into the hole (tilted slabs, not a flat square)
+    for (const s of [-1, 1]) {
+      const flap = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.55, CELL * 0.5), canvasMat);
+      flap.position.set(s * CELL * 0.26, -0.1, 0);
+      flap.rotation.set(-Math.PI / 2 + s * 0.8, s * 0.3, 0); // peeled up and tilted into the pit
+      flap.material.side = THREE.DoubleSide; grp.add(flap);
+    }
+    // splintered planks strewn around the rim
+    for (let i = 0; i < 8; i++) {
+      const pl = new THREE.Mesh(new THREE.BoxGeometry(0.1 + Math.random() * 0.12, 0.06, 0.5 + Math.random() * 0.6), plankMat);
+      pl.position.set((Math.random() - 0.5) * CELL * 0.9, 0.03 + Math.random() * 0.14, (Math.random() - 0.5) * CELL * 0.9);
+      pl.rotation.set((Math.random() - 0.5) * 0.8, Math.random() * Math.PI, (Math.random() - 0.5) * 0.7);
       pl.castShadow = true; grp.add(pl);
     }
+    // a ring of dirt/dust on the canvas around the break (child of grp so it clears with it)
+    const dirt = new THREE.Mesh(new THREE.RingGeometry(CELL * 0.45, CELL * 0.72, 20).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x2a2018, transparent: true, opacity: 0.5, depthWrite: false }));
+    dirt.position.set(0, 0.015, 0); dirt.renderOrder = 2; grp.add(dirt);
     this.group.add(grp); this._debris[k] = grp;
+  }
+
+  /** Clear all ring-break visuals (called between matches). */
+  resetRingDamage() {
+    if (this._debris) {
+      for (const g of Object.values(this._debris)) {
+        this.group.remove(g);
+        g.traverse((o) => { if (o.isMesh) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });
+      }
+      this._debris = {};
+    }
+    if (this.ringDmgCells) for (let k = 0; k < this.ringDmgCells.length; k++) { this.ringDmgCells[k].visible = false; this.ringDmgState[k] = 0; }
   }
 
   /** Target shadow on the canvas showing where a rafter diver will land. */
@@ -317,12 +352,17 @@ export class ArenaView {
       this.ringDmgState[k] = lvl;
       const m = this.ringDmgCells[k];
       if (lvl === 0) { m.visible = false; continue; }
-      m.visible = true;
-      m.material = lvl === 2 ? this._ringDmgMats.hole : this._ringDmgMats.crack;
-      // draw on top of the canvas so it reads from above (a hole is a black void)
-      m.position.y = R.height + (lvl === 2 ? 0.04 : 0.02);
-      m.renderOrder = 3;
-      if (lvl === 2) this.spawnRingDebris(k);
+      if (lvl === 2) {
+        // broken: let the layered debris (pit + torn canvas + wood) read instead of a flat square
+        m.visible = false;
+        this.spawnRingDebris(k);
+      } else {
+        // cracked/bent canvas: a dark sagging patch tilted slightly
+        m.visible = true; m.material = this._ringDmgMats.crack;
+        m.position.y = R.height + 0.015;
+        m.rotation.set(0.06, 0, 0.05); // slight sag/bend (geometry is already flat)
+        m.renderOrder = 3;
+      }
     }
   }
 

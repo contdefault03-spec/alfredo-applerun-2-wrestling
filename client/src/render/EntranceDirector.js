@@ -81,6 +81,7 @@ export class EntranceDirector {
       f._entranceHidden = false;
       if (pos < en.index) continue;                                // already in the ring
       this.placeWalk(f, en.p, dt);                                 // the current entrant
+      this.sideFire(f, en.p, dt);                                  // flames up the sides of the aisle
     }
   }
 
@@ -199,6 +200,30 @@ export class EntranceDirector {
     if (this.camera.focus) this.camera.focus.copy(this._look);
   }
 
+  /**
+   * Flames jetting up the SIDES of the walkway as the wrestler walks out –
+   * a line of fire either side of the aisle, erupting around where they are.
+   */
+  sideFire(f, p, dt) {
+    if (!this.effects) return;
+    if (p < 0.08 || p > 0.92) return;              // only while they're on the stage/aisle
+    this._sideFireT = (this._sideFireT || 0) + dt;
+    if (this._sideFireT < 0.07) return;            // pulse ~14x/sec
+    this._sideFireT = 0;
+    const halfX = ARENA.entrance.halfX + 0.35;     // just outside the aisle edges
+    const wz = f.z;                                // flames bracket the walker
+    const zs = [wz + 1.4, wz, wz - 1.4];
+    for (const s of [-1, 1]) {
+      for (const z of zs) {
+        if (z < ARENA.ring.apronHalf - 0.5) continue; // don't spew fire inside the ring
+        const base = { x: s * halfX, y: 0.1, z };
+        this.effects.burst(base, { n: 10, speed: 1.4, color: [1, 0.5 + Math.random() * 0.35, 0.08], size: 0.18, life: 0.55, additive: true, grav: -3.4, up: 6.5 });
+        this.effects.burst(base, { n: 4, speed: 0.8, color: [0.25, 0.22, 0.2], size: 0.22, life: 0.9, additive: false, grav: -0.6, up: 2.2 }); // smoke
+      }
+    }
+    if (Math.random() < 0.12) this.audio.play?.('whoosh', { x: 0, y: 0.5, z: wz }, { volume: 0.5 });
+  }
+
   /** Fire jets (pyro) at the ring + stage – replaces confetti for entrances. */
   pyro() {
     if (!this.effects) { this.audio.crowdPop?.(0.8); return; }
@@ -308,10 +333,58 @@ export class EntranceDirector {
     } catch { /* drawImage can throw before the first decoded frame */ }
   }
 
+  /**
+   * Winner celebration media: the champ's song + video on the titantron, both
+   * LOOPING for as long as the celebration runs (stopped by stopWinner()).
+   */
+  startWinner(charId) {
+    if (!charId) return;
+    this._winner = charId;
+    this.screens.suspended = true;        // we own the titantron again
+    const cfg = getEntrance(charId);
+    try { this._song?.stop?.(); } catch { /* ignore */ }
+    this._song = this.audio.playEntranceSong?.(assetUrl(cfg.song), { loop: true }) || null;
+    try {
+      if (!this.video) {
+        const v = document.createElement('video');
+        v.muted = true; v.playsInline = true; v.crossOrigin = 'anonymous';
+        v.style.display = 'none'; document.body.appendChild(v);
+        this.video = v;
+      }
+      this.video.loop = true;             // always loop for the celebration
+      this.video.src = assetUrl(cfg.video);
+      this.video.currentTime = 0;
+      this.video.play().catch(() => { /* headless: drawTron falls back to text */ });
+    } catch { /* no DOM video */ }
+  }
+
+  /** Draw the looping winner clip + a WINNER nameplate on the titantron. */
+  drawWinner() {
+    if (!this._winner) return;
+    const tron = this.arena?.tron; if (!tron) return;
+    this.drawTron(this._winner, null);
+    const { ctx: x, canvas: c, texture } = tron;
+    const W = c.width;
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = 'rgba(0,0,0,0.5)'; x.fillRect(0, 16, W, 96);
+    x.font = 'bold 76px Impact, Arial Black, sans-serif'; x.fillStyle = '#ffd24a';
+    x.fillText('★ WINNER ★', W / 2, 64);
+    texture.needsUpdate = true;
+  }
+
+  stopWinner() {
+    if (!this._winner) return;
+    this._winner = null;
+    this.screens.suspended = false;
+    try { this._song?.stop?.(); } catch { /* ignore */ }
+    this._song = null;
+    try { this.video?.pause?.(); if (this.video) this.video.src = ''; } catch { /* ignore */ }
+  }
+
   /** Called when the entrance phase ends (or the match tears down). */
   stop() {
-    if (!this.active && !this._song && !this.video) return;
-    this.active = false;
+    if (!this.active && !this._song && !this.video && !this._winner) return;
+    this.active = false; this._winner = null;
     this.screens.suspended = false;
     this._mediaFor = null; this._announced = false; this._coatThrown = false; this._firedEntry = false; this._shot = -1;
     if (this._swapped != null && this.assets) { const v = this.views.get(this._swapped); if (v) v.swapModel(this.assets, v.charId); this._swapped = null; }

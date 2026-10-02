@@ -29,6 +29,7 @@ export function createFighter({ id, charId, team = 0, name, isAI = false, diffic
     lastHitBy: null, lastHitTime: -99,
     eliminated: false, hidden: false,
     underRing: false, underRingT: 0, // fallen through a broken ring section
+    noFall: 0,                       // brief immunity from falling through the ring
     refHeat: 0, refHeatT: -99,       // "attacking a downed foe" heat for ref interference
     outside: false,                  // vaulted beyond the ringside barricade
     legal: true,             // tag-team legality
