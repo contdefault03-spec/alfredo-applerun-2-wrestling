@@ -83,7 +83,7 @@ export class Game {
     this.screens = new ScreenDirector(this.arena);
     this.entranceDir = new EntranceDirector({
       scene: this.scene, camera: this.camera, audio: this.audio, arena: this.arena,
-      screens: this.screens, commentary: this.commentary, ui: this.ui, views: this.views, effects: this.effects,
+      screens: this.screens, commentary: this.commentary, ui: this.ui, views: this.views, effects: this.effects, assets: this.assets,
     });
     this.entranceDir.getSession = () => this.session;
     this.entranceDir.getNet = () => this.net;
@@ -92,6 +92,8 @@ export class Game {
     this.ui.loading(0.15, 'Loading wrestlers…');
     this.assets.onProgress((p) => this.ui.loading(0.15 + p * 0.75, 'Loading wrestlers…'));
     await this.assets.loadAll();
+    // Max's entrance coat/hat/glasses model (swapped in during his entrance)
+    await this.assets.loadExtra('maxentr', 'assets/characters/maxentr.glb', CHARACTERS.max.rig).catch((e) => console.warn('maxentr load failed', e));
     this.ui.loading(0.95, 'Warming up…');
     this.ui.portraits = makePortraits(this.renderer.renderer, this.assets);
     this.ui.hideLoading();
