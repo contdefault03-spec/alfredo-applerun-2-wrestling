@@ -205,6 +205,27 @@ export class ArenaView {
     this.barricadeMeshes = [bm];
     this.buildAds();
     this.buildRingDamage();
+    this.buildCars();
+  }
+
+  // ── a couple of cars parked by the entrance (just for show) ──
+  buildCars() {
+    const car = (x, z, rotY, color) => {
+      const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rotY;
+      const bodyMat = std({ color, roughness: 0.35, metalness: 0.6 });
+      const glassMat = std({ color: 0x101418, roughness: 0.15, metalness: 0.4 });
+      const tyreMat = std({ color: 0x111113, roughness: 0.9 });
+      add(g, new THREE.BoxGeometry(2.0, 0.62, 4.4), bodyMat, { pos: [0, 0.62, 0] });            // body
+      add(g, new THREE.BoxGeometry(1.8, 0.66, 2.1), bodyMat, { pos: [0, 1.12, -0.1] });          // cabin
+      add(g, new THREE.BoxGeometry(1.74, 0.5, 2.0), glassMat, { pos: [0, 1.16, -0.1] });          // windows
+      for (const [wx, wz] of [[0.95, 1.4], [-0.95, 1.4], [0.95, -1.4], [-0.95, -1.4]]) {
+        const w = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 16), tyreMat);
+        w.rotation.z = Math.PI / 2; w.position.set(wx, 0.42, wz); g.add(w);
+      }
+      this.group.add(g);
+      return g;
+    };
+    this.cars = [car(-7.5, 13.6, 0.25, 0x8a1016), car(7.8, 14.2, -0.3, 0x14305a)];
   }
 
   // ── ring destruction overlays (cracks + holes), toggled from the snapshot ──

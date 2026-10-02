@@ -174,7 +174,8 @@ export class FighterController {
         }
         break;
       case S.DOWN:
-        f.downTimer -= dt * (1 + Math.min(1.5, f.mash * 0.12));
+        // mashing only helps a little now – they really have to struggle up
+        f.downTimer -= dt * (1 + Math.min(0.7, f.mash * 0.05));
         if (f.downTimer <= 0) { setState(f, S.GETUP, 0.75 / f.c.recoverySpeed); f.invuln = 0.35; }
         break;
       case S.GETUP:

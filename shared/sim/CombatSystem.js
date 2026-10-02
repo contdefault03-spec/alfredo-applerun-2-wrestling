@@ -195,7 +195,8 @@ export class CombatSystem {
   knockDown(v, vx, vy, vz, downTime) {
     setState(v, S.AIRBORNE, 0);
     v.vx = vx; v.vy = vy; v.vz = vz; v.onGround = false;
-    v.downTimer = downTime ?? (1.5 + Math.random() * 0.4) / v.c.recoverySpeed;
+    // stay down longer the more hurt they are – they have to struggle back up (~4–6.5s)
+    v.downTimer = downTime ?? (4 + (1 - hpFrac(v)) * 2.5) / v.c.recoverySpeed;
     // fall on back when pushed away from the direction they face, else face-down
     const facing = Math.sin(v.yaw) * vx + Math.cos(v.yaw) * vz;
     v.sub = facing > 0 ? 1 : 0; // 1 = falls forward (face down)
