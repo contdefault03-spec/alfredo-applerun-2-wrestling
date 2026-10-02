@@ -18,7 +18,7 @@ import { CrowdSystem } from '../render/CrowdSystem.js';
 import { FighterView } from '../render/FighterView.js';
 import { ItemViews } from '../render/ItemViews.js';
 import { Effects, Confetti } from '../render/Effects.js';
-import { Referee, Commentator, Announcer } from '../render/NPCs.js';
+import { Referee, Commentator, Announcer, RingGirl } from '../render/NPCs.js';
 import { ScreenDirector } from '../render/ScreenDirector.js';
 import { EntranceDirector } from '../render/EntranceDirector.js';
 import { CameraSystem } from '../camera/CameraSystem.js';
@@ -406,6 +406,7 @@ export class Game {
       this.confetti.update(dt, this.time);
       this.announcer.update(dt);
       this.commentators.forEach((c) => c.update(dt));
+      this.updateRingGirls(dt);
       this.screens.update(dt, this.time, this.session?.view?.());
       const cam = this.renderer.camera;
       this.audio.setListener(cam.position, cam.getWorldDirection(new THREE.Vector3()));
@@ -728,30 +729,38 @@ export class Game {
     try { npc._glb = npc.setModel(src.clone(true)); } catch (e) { console.warn('skinNPC failed', e); }
   }
 
-  /** Ring girls (girl.glb) around ringside – shown for entrances + after the bell. */
+  /** Ring girls (girl.glb) around ringside – rigged so they walk, wave & applaud. */
   buildRingGirls() {
     const src = this.assets.props?.girl; if (!src) return;
     this.ringGirls = [];
-    // normalise to ~1.7 m tall
-    const box = new THREE.Box3().setFromObject(src);
-    const h = Math.max(0.1, box.max.y - box.min.y);
-    const scale = 1.7 / h;
-    const spots = [[-4.6, 0, 4.6], [4.6, 0, 4.6], [-4.6, 0, -4.6], [4.6, 0, -4.6]];
-    for (const [x, y, z] of spots) {
-      const g = src.clone(true);
-      g.scale.setScalar(scale);
-      g.position.set(x, y, z);
-      g.rotation.y = Math.atan2(-x, -z); // face the ring
-      g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-      g.visible = false;
-      this.scene.add(g);
+    const spots = [[-4.6, 4.6], [4.6, 4.6], [-4.6, -4.6], [4.6, -4.6]];
+    const shirts = ['#d81b60', '#8e24aa', '#00897b', '#f4511e'];
+    spots.forEach(([x, z], i) => {
+      const g = new RingGirl(this.scene, { x, z }, shirts[i]);
+      try { g.setModel(src.clone(true)); } catch (e) { console.warn('ring girl rig failed', e); }
       this.ringGirls.push(g);
-    }
+    });
   }
 
   setRingGirls(show) {
     if (!this.ringGirls) return;
-    for (const g of this.ringGirls) g.visible = show;
+    for (const g of this.ringGirls) g.root.visible = show;
+  }
+
+  updateRingGirls(dt) {
+    if (!this.ringGirls) return;
+    for (const g of this.ringGirls) g.update(dt);
+  }
+
+  /** Winner announced: the girls cheer, and the nearest one walks over to the champ. */
+  ringGirlsCelebrate(champ) {
+    if (!this.ringGirls) return;
+    for (const g of this.ringGirls) g.applaud(6);
+    if (champ) {
+      let best = null, bd = Infinity;
+      for (const g of this.ringGirls) { const d = Math.hypot(g.pos.x - champ.x, g.pos.z - champ.z); if (d < bd) { bd = d; best = g; } }
+      best?.toWinner(champ.x, champ.z);
+    }
   }
 
   /** A red blood splat that stays on the ground (or any surface). */
@@ -834,6 +843,7 @@ export class Game {
     // winner's song + video on the titantron, both looping through the celebration
     const champ = (e.winners || []).map((id) => byId.get(id)).filter(Boolean)[0];
     if (champ) { this._winnerMedia = true; this.entranceDir?.startWinner(champ.charId); }
+    this.ringGirlsCelebrate(champ);
     [[1, 1], [-1, 1], [-1, -1], [1, -1]].forEach(([sx, sz], i) => setTimeout(() => {
       const p = new THREE.Vector3(sx * R.postInset, R.height + R.postHeight + 0.1, sz * R.postInset);
       for (let k = 0; k < 4; k++) setTimeout(() => this.effects.burst(p, { n: 40, speed: 6, color: [1, 0.75, 0.3], size: 0.07, life: 0.9, grav: 0.8, up: 2.5 }), k * 140);

@@ -206,6 +206,72 @@ export class Commentator extends Human {
   }
 }
 
+/**
+ * Ring-side valet (girl.glb): strolls around her corner, waves/salutes the
+ * crowd, applauds when a winner is announced, and can walk over to the champ
+ * to blow a kiss. Same rig pipeline as the ref/announcer, so no T-pose.
+ */
+export class RingGirl extends Human {
+  constructor(scene, home, shirt = '#d81b60') {
+    super(atlas([shirt, '#e8b48a', '#20202a', '#101016', '#2a1a0f', '#ffd24a']), 1.7);
+    scene.add(this.root);
+    this.home = { x: home.x, z: home.z };
+    this.pos = new THREE.Vector3(home.x, 0, home.z);
+    this.target = new THREE.Vector3(home.x, 0, home.z);
+    this.yaw = Math.atan2(-home.x, -home.z);
+    this.prevPos = this.pos.clone();
+    this.applaudT = 0; this.kissT = 0; this.patrolT = Math.random() * 3;
+    this.root.visible = false;
+  }
+  applaud(sec = 4) { this.applaudT = Math.max(this.applaudT, sec); }
+  /** Walk over toward the champion (x,z) and blow a kiss. */
+  toWinner(x, z) { this.target.set(x + (this.home.x > 0 ? 1.6 : -1.6), 0, z + 1.4); this.kissT = 6; this.patrolT = 6; }
+  pickPatrol() {
+    const r = 1.5;
+    this.target.set(this.home.x + (Math.random() - 0.5) * r, 0, this.home.z + (Math.random() - 0.5) * r);
+  }
+  update(dt) {
+    if (!this.root.visible) return;
+    this.time += dt;
+    this.applaudT = Math.max(0, this.applaudT - dt);
+    this.kissT = Math.max(0, this.kissT - dt);
+    this.patrolT -= dt;
+    const d = Math.hypot(this.target.x - this.pos.x, this.target.z - this.pos.z);
+    if (this.patrolT <= 0 && d < 0.12 && this.applaudT <= 0 && this.kissT <= 0) { this.pickPatrol(); this.patrolT = 2.5 + Math.random() * 3; }
+    const step = Math.min(d, (this.kissT > 0 ? 2.0 : 1.3) * dt);
+    if (d > 0.06) {
+      this.pos.x += (this.target.x - this.pos.x) / d * step; this.pos.z += (this.target.z - this.pos.z) / d * step;
+      this.yaw = Math.atan2(this.target.x - this.pos.x, this.target.z - this.pos.z);
+    } else {
+      const toRing = Math.atan2(-this.pos.x, -this.pos.z);
+      this.yaw += (toRing - this.yaw) * Math.min(1, dt * 3);
+    }
+    const speed = this.prevPos.distanceTo(this.pos) / Math.max(dt, 1e-3); this.prevPos.copy(this.pos);
+    this.root.position.copy(this.pos); this.root.rotation.y = this.yaw;
+    const t = this.tgt;
+    if (this.kissT > 0 && d < 0.3) {              // blow a kiss to the champ
+      applyOverrides(t, RELAXED);
+      const k = Math.max(0, Math.sin(this.time * 3));
+      set(t, 'handR', [-0.1, 0.5 + 0.3 * k, 0.4]); set(t, 'elbowR', [0.9, -0.5, 0]);
+      set(t, 'head', [-0.1, 0, 0]); set(t, 'chest', [-0.1, 0, 0]);
+    } else if (this.applaudT > 0) {               // applaud the winner
+      applyOverrides(t, RELAXED);
+      const c = Math.sin(this.time * 14) * 0.18;
+      set(t, 'handL', [0.3, 0.12, 0.5 + c]); set(t, 'handR', [0.3, 0.12, 0.5 - c]);
+      set(t, 'elbowL', [0.5, -0.6, 0]); set(t, 'elbowR', [0.5, -0.6, 0]); set(t, 'head', [-0.12, 0, 0]);
+    } else if (speed > 0.3) {                      // strolling
+      applyOverrides(t, RELAXED, { spine: [0.08, 0, 0] });
+      this.walk(t, speed, dt);
+    } else {                                       // wave / salute the crowd
+      applyOverrides(t, RELAXED);
+      const wv = Math.sin(this.time * 5);
+      set(t, 'handR', [0.1, 0.75 + 0.2 * wv, 0.2]); set(t, 'elbowR', [0.3, -0.2, 0]);
+      add(t, 'head', [0, 0.2 * Math.sin(this.time * 1.5), 0]);
+    }
+    this.solve(dt, 14);
+  }
+}
+
 /** Ring announcer in a tuxedo with a microphone: introduces the match and the winner. */
 export class Announcer extends Human {
   constructor(scene) {
