@@ -79,6 +79,15 @@ export class AssetManager {
     return p;
   }
 
+  /** Load a decorative prop GLB (unrigged) under a key; returns its scene to clone. */
+  loadProp(id, url) {
+    this.props = this.props || {};
+    if (this.props[id]) return Promise.resolve(this.props[id]);
+    return new Promise((resolve, reject) => {
+      this.loader.load(this.url(url), (g) => { this.props[id] = g.scene; resolve(g.scene); }, undefined, reject);
+    });
+  }
+
   /** Load with retries (flaky mobile networks, dev-server reloads…). */
   async loadWithRetry(id, tries = 3) {
     for (let i = 0; i < tries; i++) {

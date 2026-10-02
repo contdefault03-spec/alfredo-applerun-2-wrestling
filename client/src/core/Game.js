@@ -94,6 +94,7 @@ export class Game {
     await this.assets.loadAll();
     // Max's entrance coat/hat/glasses model (swapped in during his entrance)
     await this.assets.loadExtra('maxentr', 'assets/characters/maxentr.glb', CHARACTERS.max.rig).catch((e) => console.warn('maxentr load failed', e));
+    await this.assets.loadProp('girl', 'assets/characters/girl.glb').then(() => this.buildRingGirls()).catch((e) => console.warn('girl load failed', e));
     this.ui.loading(0.95, 'Warming up…');
     this.ui.portraits = makePortraits(this.renderer.renderer, this.assets);
     this.ui.hideLoading();
@@ -218,6 +219,7 @@ export class Game {
   endMatchCleanup() {
     this.entranceDir?.stop();
     this.clearGore();
+    this.setRingGirls(false);
     if (this.session) { this.session.dispose?.(); this.session = null; }
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
@@ -420,6 +422,7 @@ export class Game {
     this.arena.updateRopes(dt, view.fighters);
     this.arena.updateRingDamage(view.ring);
     this.arena.setCageDoor(view.cageDoor);
+    this.setRingGirls(['entrances', 'finished', 'over'].includes(view.match.phase));
     const diver = view.fighters.find((f) => f.state === S.RAFTER || f.state === S.RAFTER_DROP);
     this.arena.showDropShadow(diver?.x || 0, diver?.z || 0, !!diver);
     const events = this.session.takeEvents();
@@ -627,6 +630,32 @@ export class Game {
         case 'env_damage': break;
       }
     }
+  }
+
+  /** Ring girls (girl.glb) around ringside – shown for entrances + after the bell. */
+  buildRingGirls() {
+    const src = this.assets.props?.girl; if (!src) return;
+    this.ringGirls = [];
+    // normalise to ~1.7 m tall
+    const box = new THREE.Box3().setFromObject(src);
+    const h = Math.max(0.1, box.max.y - box.min.y);
+    const scale = 1.7 / h;
+    const spots = [[-4.6, 0, 4.6], [4.6, 0, 4.6], [-4.6, 0, -4.6], [4.6, 0, -4.6]];
+    for (const [x, y, z] of spots) {
+      const g = src.clone(true);
+      g.scale.setScalar(scale);
+      g.position.set(x, y, z);
+      g.rotation.y = Math.atan2(-x, -z); // face the ring
+      g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+      g.visible = false;
+      this.scene.add(g);
+      this.ringGirls.push(g);
+    }
+  }
+
+  setRingGirls(show) {
+    if (!this.ringGirls) return;
+    for (const g of this.ringGirls) g.visible = show;
   }
 
   /** Cartoonish KO gore: a spray of blood + a couple of limbs flung off. */
