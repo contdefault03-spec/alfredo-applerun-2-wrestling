@@ -96,11 +96,21 @@ export class EntranceDirector {
     } else if (p < 0.78) {          // walk down the ramp toward the ring
       const raw = (p - reveal) / (0.78 - reveal);
       // human pacing: a slight speed ripple (occasional slow/fast) instead of a constant march
-      const uu = Math.max(0, Math.min(1, raw + Math.sin(raw * Math.PI * 2.5) * 0.035));
+      let uu = Math.max(0, Math.min(1, raw + Math.sin(raw * Math.PI * 2.5) * 0.035));
       // a gentle side-to-side zig-zag that settles as they near the ring; per-character amount
       const swayAmt = f.charId === 'lucky' ? 0.14 : f.charId === 'max' ? 0.5 : f.charId === 'ajan' ? 0.25 : 0.4;
-      const sway = Math.sin(raw * Math.PI * 3 + (f._spawnX || 0)) * swayAmt * (1 - raw);
-      x = spawnX * 0.35 * uu + sway; z = STAGE_Z + (APPROACH_Z - STAGE_Z) * uu; y = 0; walking = true;
+      let sway = Math.sin(raw * Math.PI * 3 + (f._spawnX || 0)) * swayAmt * (1 - raw);
+      y = 0;
+      if (f.charId === 'lucky') {            // SPRINT in fast, with bouncy hops
+        uu = Math.min(1, raw * 1.9);
+        y = Math.abs(Math.sin(raw * Math.PI * 6)) * 0.28;   // quick hops
+        f.runTime = (f.runTime || 0) + dt * 2;
+      } else if (f.charId === 'masked' && raw < 0.5) {       // MOONWALK: glide backward before heading in
+        const m = raw / 0.5;
+        uu = m * 0.25 - Math.sin(m * Math.PI * 4) * 0.06;    // drift back and forth, net little forward
+        sway += Math.sin(m * Math.PI * 5) * 0.25;
+      }
+      x = spawnX * 0.35 * uu + sway; z = STAGE_Z + (APPROACH_Z - STAGE_Z) * uu; walking = true;
       f._lookCrowd = Math.sin(raw * Math.PI * 4) * 0.3; // slight head/body turn toward the crowd
     } else if (p < 0.9) {           // climb UP onto the apron, then step in (not a diagonal float)
       const u = (p - 0.78) / 0.12;
