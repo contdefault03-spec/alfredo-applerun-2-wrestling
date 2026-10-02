@@ -52,8 +52,10 @@ test('the interfering ref can be grabbed and slammed, then recovers', () => {
   w.match.referee.x = a.x; w.match.referee.z = a.z; // in range
   const ok = w.match.grabReferee(a.id);
   assert.equal(ok, true);
-  assert.equal(w.match.referee.state, 'down');
-  assert.ok(drain(w).some?.(() => true) || true);
+  assert.equal(w.match.referee.state, 'grabbed', 'grabbed + lifted first');
+  // hold then slam
+  for (let i = 0; i < Math.ceil(1.0 / DT); i++) w.step();
+  assert.equal(w.match.referee.state, 'down', 'slammed down');
   for (let i = 0; i < Math.ceil(REF_DOWN_TIME / DT) + 10; i++) w.step();
   assert.equal(w.match.referee.state, 'watch', 'ref gets back up');
 });
@@ -83,6 +85,7 @@ test('the ref is out for good after enough slams', () => {
     assert.equal(ref.state, 'warn', 'warn on slam ' + s);
     ref.x = a.x; ref.z = a.z;
     assert.equal(w.match.grabReferee(a.id), true);
+    for (let i = 0; i < Math.ceil(1.0 / DT); i++) w.step(); // grab -> lift -> slam
   }
   assert.equal(w.match.referee.dead, true, 'ref is dead');
   // never recovers

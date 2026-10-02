@@ -146,6 +146,25 @@ export class Referee extends Human {
       case 'raise':
         applyOverrides(t, RELAXED); set(t, 'handR', [0.35, 1.05, 0.05]); set(t, 'handL', [0.2, -0.5, 0.3]);
         break;
+      case 'warn':
+        // marching in, wagging a finger at the offender
+        applyOverrides(t, RELAXED, { hipsOff: [0, -0.06, 0], spine: [0.18, 0, 0] });
+        set(t, 'handR', [0.2, 0.75 + 0.15 * Math.sin(this.time * 12), 0.35]); set(t, 'handL', [0.12, -0.55, 0.25]);
+        this.walk(t, speed, dt);
+        break;
+      case 'grabbed': {
+        // hoisted off the mat, body limp — arms and head dangling
+        const sw = Math.sin(this.time * 6) * 0.12;
+        applyOverrides(t, RELAXED, { hipsOff: [0, -0.1, 0], spine: [0.35, sw, 0], chest: [0.25, 0, 0], head: [0.5, sw, 0],
+          handL: [-0.1, -0.95, 0.1], handR: [-0.1, -0.95, 0.1], footL: [0.05, -0.2, -0.15], footR: [0.05, -0.2, 0.15], kneeL: [0, -0.1, 0.4], kneeR: [0, -0.1, 0.4] });
+        break;
+      }
+      case 'down':
+        // flat on his back on the canvas, out cold
+        applyOverrides(t, RELAXED, { hipsOff: [0, -0.62, 0], spine: [0, 0, 0], chest: [-0.1, 0, 0], head: [0.2, 0.3, 0],
+          footL: [0.35, 0, -0.5], footR: [0.35, 0, -0.5], kneeL: [0, 0.1, 0.2], kneeR: [0, -0.1, 0.2],
+          handL: [0.1, -0.2, -0.9], handR: [0.1, -0.2, -0.9] });
+        break;
       default:
         applyOverrides(t, RELAXED, { hipsOff: [0, -0.08, 0], spine: [0.22, 0, 0], handL: [0.12, -0.6, 0.25], handR: [0.12, -0.6, 0.25] });
         this.walk(t, speed, dt);

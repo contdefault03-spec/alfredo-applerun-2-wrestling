@@ -226,6 +226,7 @@ export class Game {
   endMatchCleanup() {
     this.entranceDir?.stop();
     this.clearGore();
+    this.restoreReferee();
     this.setRingGirls(false);
     this.arena?.resetRingDamage?.();
     if (this.session) { this.session.dispose?.(); this.session = null; }
@@ -655,8 +656,49 @@ export class Game {
         case 'irish_whip': { const f = byId.get(e.fighter); if (f) A.play('grunt', new THREE.Vector3(f.x, f.y + 1.5, f.z), { pitch: f.c.voicePitch }); break; }
         case 'throw': A.play('whoosh', p, { volume: 1 }); C.react('pop', 0.4); break;
         case 'env_damage': break;
+        // ── referee interference / grab-the-ref ──
+        case 'ref_warn': { ui.feed('The referee is warning ' + name(e.fighter) + '!'); C.react('pop', 0.3); break; }
+        case 'ref_block': { const rp = this.refPos(view); A.play('block', rp, { volume: 0.9 }); cam.shake(0.12); C.react('pop', 0.4); A.crowdPop(0.4); ui.feed('The ref breaks it up!'); break; }
+        case 'ref_grab': { const rp = this.refPos(view); A.play('grunt', rp, { volume: 1 }); C.react('pop', 0.5); A.crowdPop(0.6); ui.feed('Grabbing the referee!'); break; }
+        case 'ref_grabbed': {
+          const rp = this.refPos(view);
+          A.play('slam', rp, { volume: 1.3 }); A.play('bodyfall', rp, { volume: 1.1 });
+          cam.shake(0.5); cam.punch(4); C.react('big'); A.crowdPop(1.1);
+          E.burst(rp, { n: 16, speed: 3, color: [0.55, 0.45, 0.3], size: 0.1, life: 0.7, grav: 1.6 });
+          ui.feed('SLAMS the referee down!');
+          if (e.count >= 2 && this.settings.get().gore !== false) this.bloodHit(rp, 0.9);
+          break;
+        }
+        case 'ref_dead': { ui.banner('THE REF IS DOWN!', 'No count — anything goes', 2200); cam.shake(0.6); A.crowdBoo(0.6); this.refGore(); break; }
+        case 'ref_recover': { ui.feed('The referee is back on his feet'); break; }
       }
     }
+  }
+
+  /** The referee gets torn up (same stylized gore as a fighter KO), on his own model. */
+  refGore() {
+    const ref = this.referee;
+    if (!ref || this.settings.get().gore === false) return;
+    const rp = new THREE.Vector3(); ref.root.getWorldPosition(rp);
+    for (let i = 0; i < 4; i++) this.effects.burst({ x: rp.x, y: rp.y + 0.4 + Math.random(), z: rp.z }, { n: 36, speed: 3 + i, color: [0.72, 0.02, 0.04], size: 0.14, life: 1.1, grav: 2.4, up: 2.4 });
+    this.bloodDecal(rp.x, rp.z, 1.3); this.bloodDecal(rp.x, rp.z, 0.9);
+    const bones = ref.solver?.b;
+    if (bones) {
+      ref._severed = ref._severed || {};
+      const choices = ['lowerArm_R', 'lowerArm_L', 'lowerLeg_R', 'lowerLeg_L'];
+      const avail = choices.filter((n) => bones[n] && !ref._severed[n]);
+      if (avail.length) {
+        const bn = avail[Math.floor(Math.random() * avail.length)];
+        const bone = bones[bn];
+        const wpos = bone.getWorldPosition(new THREE.Vector3());
+        bone.scale.setScalar(0.0001); ref._severed[bn] = true;
+        const piece = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.46, 4, 8), new THREE.MeshStandardMaterial({ color: 0xd8a97a, roughness: 0.85 }));
+        piece.position.copy(wpos); this.scene.add(piece);
+        const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 2.5;
+        this.gorePieces.push({ mesh: piece, vx: Math.cos(a) * sp, vy: 3.5 + Math.random() * 2, vz: Math.sin(a) * sp, spin: (Math.random() - 0.5) * 14, landed: false });
+      }
+    }
+    this.audio.crowdBoo?.(0.5);
   }
 
   /** Windshield smash: real glass shards fly off + blood + crack the pane. */
@@ -753,6 +795,15 @@ export class Game {
       }
     }
     this.audio.crowdBoo?.(0.5);
+  }
+
+  /** Un-sever the referee's limbs so he's whole again for the next match. */
+  restoreReferee() {
+    const ref = this.referee;
+    if (!ref?._severed) return;
+    const bones = ref.solver?.b;
+    if (bones) for (const n of Object.keys(ref._severed)) { if (bones[n]) bones[n].scale.setScalar(1); }
+    ref._severed = {};
   }
 
   updateGore(dt) {

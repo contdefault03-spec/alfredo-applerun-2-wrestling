@@ -10,7 +10,7 @@ export const PROTOCOL_VERSION = 3;
 const STATES = Object.values(S);
 const STATE_CODE = Object.fromEntries(STATES.map((s, i) => [s, i]));
 const ZONES = ['ring', 'floor', 'apron'];
-const REF_STATES = ['watch', 'count', 'slide', 'signal', 'raise', 'warn', 'down'];
+const REF_STATES = ['watch', 'count', 'slide', 'signal', 'raise', 'warn', 'grabbed', 'down'];
 
 const r3 = (v) => Math.round(v * 1000) / 1000;
 const r2 = (v) => Math.round(v * 100) / 100;
