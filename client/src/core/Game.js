@@ -667,19 +667,10 @@ export class Game {
     this.camera.shake(0.5);
   }
 
-  /** Replace a procedural NPC's look with a GLB model (same behavior/position). */
+  /** Give a procedural NPC a GLB body, re-rigged so it still animates (no T-pose). */
   skinNPC(npc, src) {
-    if (!npc || !src) return;
-    const m = src.clone(true);
-    const box = new THREE.Box3().setFromObject(m);
-    const h = Math.max(0.1, box.max.y - box.min.y);
-    const sc = (npc.scale || 1.78) / h;
-    m.scale.setScalar(sc);
-    m.position.y = -box.min.y * sc;
-    m.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-    npc.root.add(m);
-    if (npc.pivot) npc.pivot.visible = false; // hide the procedural body
-    npc._glb = m;
+    if (!npc || !src || typeof npc.setModel !== 'function') return;
+    try { npc._glb = npc.setModel(src.clone(true)); } catch (e) { console.warn('skinNPC failed', e); }
   }
 
   /** Ring girls (girl.glb) around ringside – shown for entrances + after the bell. */

@@ -69,6 +69,30 @@ class Human {
     this.phase = 0; this.time = Math.random() * 5;
     this.legLenM = this.solver.legLen * height;
   }
+  /**
+   * Replace the procedural body with a GLB model, re-rigged onto the SAME pose
+   * skeleton so all existing animation (walk/turn/count/gesture) still drives it
+   * (no T-pose). Call once after load.
+   */
+  setModel(src) {
+    let mesh = null; src.updateMatrixWorld(true);
+    src.traverse((o) => { if ((o.isMesh || o.isSkinnedMesh) && !mesh) mesh = o; });
+    if (!mesh) return false;
+    const rig = autoRig(mesh, RIG);
+    const topY = rig.joints?.headTop?.y || 1;
+    const sc = this.scale / topY;             // normalise the GLB to the NPC height
+    if (this._rigMesh) this.pivot.remove(this._rigMesh);
+    rig.mesh.scale.setScalar(sc);
+    this.pelvisH = (rig.joints?.hips?.y || 0.52) * sc;
+    rig.mesh.position.y = -this.pelvisH;
+    rig.mesh.frustumCulled = false;
+    this.pivot.add(rig.mesh);
+    this.solver = new PoseSolver(rig);
+    this.legLenM = this.solver.legLen * sc;
+    this._rigMesh = rig.mesh;
+    return true;
+  }
+
   walk(t, speed, dt) {
     this.phase = (this.phase + speed * dt / (this.legLenM * 1.4)) % 1;
     const m = Math.min(1, speed / 0.6), ph = this.phase * Math.PI * 2;
