@@ -55,6 +55,39 @@ export class AssetManager {
     return p;
   }
 
+  /** Load + auto-rig an extra (non-roster) model under a key, e.g. Max's coat. */
+  loadExtra(id, modelPath, rig) {
+    if (this.templates.has(id)) return Promise.resolve(this.templates.get(id));
+    if (this.pending.has(id)) return this.pending.get(id);
+    const p = new Promise((resolve, reject) => {
+      this.loader.load(this.url(modelPath), (gltf) => {
+        let src = null; gltf.scene.traverse((o) => { if (o.isMesh && !src) src = o; });
+        gltf.scene.updateMatrixWorld(true);
+        const mat = src.material;
+        mat.envMapIntensity = 0.85; mat.metalness = Math.min(mat.metalness ?? 0, 0.15);
+        mat.onBeforeCompile = (sh) => {
+          sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>',
+            '#include <roughnessmap_fragment>\n  roughnessFactor = clamp(roughnessFactor * 1.15 + 0.12, 0.42, 1.0);');
+        };
+        if (mat.map) mat.map.anisotropy = 8;
+        const tpl = { ...autoRig(src, rig), id };
+        this.templates.set(id, tpl);
+        resolve(tpl);
+      }, undefined, (err) => { this.pending.delete(id); reject(err); });
+    });
+    this.pending.set(id, p);
+    return p;
+  }
+
+  /** Load a decorative prop GLB (unrigged) under a key; returns its scene to clone. */
+  loadProp(id, url) {
+    this.props = this.props || {};
+    if (this.props[id]) return Promise.resolve(this.props[id]);
+    return new Promise((resolve, reject) => {
+      this.loader.load(this.url(url), (g) => { this.props[id] = g.scene; resolve(g.scene); }, undefined, reject);
+    });
+  }
+
   /** Load with retries (flaky mobile networks, dev-server reloads…). */
   async loadWithRetry(id, tries = 3) {
     for (let i = 0; i < tries; i++) {

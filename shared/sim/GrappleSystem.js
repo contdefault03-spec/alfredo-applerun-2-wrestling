@@ -2,7 +2,7 @@
 import { ATTACKS } from '../config/attacks.js';
 import { ARENA } from '../config/arena.js';
 import { BTN, S, ZONE, DOWN_STATES, RING_BREAK_CHANCE } from './constants.js';
-import { setState, forwardOf, dist2D, scaleOf, angleTo, turnToward } from './Fighter.js';
+import { setState, forwardOf, dist2D, scaleOf, angleTo, turnToward, hpFrac } from './Fighter.js';
 import { moveId } from './FighterController.js';
 
 const R = ARENA.ring;
@@ -208,7 +208,7 @@ export class GrappleSystem {
         w.items.checkTableBreak(v, 12);
         // victim now lying down
         f.holding = null; v.heldBy = null;
-        setState(v, S.DOWN); v.downTimer = (f.moveSpecial ? 3.2 : 2.2) / v.c.recoverySpeed; v.mash = 0; v.tilt = 0;
+        setState(v, S.DOWN); v.downTimer = (f.moveSpecial ? 6.5 : 5 + (1 - hpFrac(v)) * 2) / v.c.recoverySpeed; v.mash = 0; v.tilt = 0;
         if (v.hp <= 0) w.combat.knockOut(v, f);
       }
     }

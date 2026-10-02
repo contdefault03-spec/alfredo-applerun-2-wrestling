@@ -83,7 +83,7 @@ export class Game {
     this.screens = new ScreenDirector(this.arena);
     this.entranceDir = new EntranceDirector({
       scene: this.scene, camera: this.camera, audio: this.audio, arena: this.arena,
-      screens: this.screens, commentary: this.commentary, ui: this.ui, views: this.views, effects: this.effects,
+      screens: this.screens, commentary: this.commentary, ui: this.ui, views: this.views, effects: this.effects, assets: this.assets,
     });
     this.entranceDir.getSession = () => this.session;
     this.entranceDir.getNet = () => this.net;
@@ -92,6 +92,11 @@ export class Game {
     this.ui.loading(0.15, 'Loading wrestlers…');
     this.assets.onProgress((p) => this.ui.loading(0.15 + p * 0.75, 'Loading wrestlers…'));
     await this.assets.loadAll();
+    // Max's entrance coat/hat/glasses model (swapped in during his entrance)
+    await this.assets.loadExtra('maxentr', 'assets/characters/maxentr.glb', CHARACTERS.max.rig).catch((e) => console.warn('maxentr load failed', e));
+    await this.assets.loadProp('girl', 'assets/characters/girl.glb').then(() => this.buildRingGirls()).catch((e) => console.warn('girl load failed', e));
+    await Promise.all([this.assets.loadProp('car1', 'assets/characters/car1.glb'), this.assets.loadProp('car2', 'assets/characters/car2.glb')])
+      .then(() => this.arena.placeCars(this.assets)).catch((e) => console.warn('car load failed', e));
     this.ui.loading(0.95, 'Warming up…');
     this.ui.portraits = makePortraits(this.renderer.renderer, this.assets);
     this.ui.hideLoading();
@@ -216,6 +221,7 @@ export class Game {
   endMatchCleanup() {
     this.entranceDir?.stop();
     this.clearGore();
+    this.setRingGirls(false);
     if (this.session) { this.session.dispose?.(); this.session = null; }
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
@@ -417,6 +423,16 @@ export class Game {
     this.referee.update(dt, view.referee);
     this.arena.updateRopes(dt, view.fighters);
     this.arena.updateRingDamage(view.ring);
+    this.arena.setCageDoor(view.cageDoor);
+    this.setRingGirls(['entrances', 'finished', 'over'].includes(view.match.phase));
+    // slam/crash into a parked car → windshield shatters (glass + blood)
+    for (const f of view.fighters) {
+      if (!f.outside || f.hidden) continue;
+      const spd = Math.hypot(f.vx || 0, f.vz || 0);
+      if (spd < 4 && !['down', 'knockdown', 'airborne'].includes(f.state)) continue;
+      const car = this.arena.carNear(f.x, f.z, 2.4);
+      if (car && this.arena.breakCar(car)) this.carCrashFX(car);
+    }
     const diver = view.fighters.find((f) => f.state === S.RAFTER || f.state === S.RAFTER_DROP);
     this.arena.showDropShadow(diver?.x || 0, diver?.z || 0, !!diver);
     const events = this.session.takeEvents();
@@ -553,6 +569,16 @@ export class Game {
         case 'turnbuckle_hit': A.play('turnbuckle', p); cam.shake(0.25); C.react('pop', 0.3); break;
         case 'barricade_hit': case 'desk_hit': case 'apron_hit': A.play('barricade', p); cam.shake(0.35); C.react('pop', 0.5); A.crowdPop(0.5); break;
         case 'cage_hit': A.play('cage', p, { volume: 1.3 }); this.arena.cageShake = 1; cam.shake(0.5); C.react('big'); A.crowdPop(0.8); break;
+        case 'cage_door_break': A.play('cage', p, { volume: 1.5 }); cam.shake(0.7); E.burst(p, { n: 20, speed: 4, color: [0.6, 0.6, 0.65], size: 0.08, life: 0.7 }); ui.feed('THE CAGE DOOR BREAKS OPEN!'); C.react('big'); A.crowdPop(1.2); break;
+        case 'ring_break': {
+          const bp = { x: e.x ?? 0, y: ARENA.ring.height, z: e.z ?? 0 };
+          A.play('table', bp, { volume: 1.5 }); cam.shake(0.9); cam.punch(5);
+          E.burst(bp, { n: 40, speed: 4, color: [0.4, 0.33, 0.22], size: 0.18, life: 1.2, additive: false, grav: 1.6, up: 2 }); // dust/dirt
+          E.burst(bp, { n: 24, speed: 5, color: [0.5, 0.36, 0.2], size: 0.12, life: 1.0, additive: false, grav: 2 });          // splinters
+          ui.banner('THE RING BREAKS!', '', 1800); C.react('big'); A.crowdPop(1.6);
+          break;
+        }
+        case 'ring_fall': { const fp = { x: e.x ?? 0, y: ARENA.ring.height, z: e.z ?? 0 }; A.play('bodyfall', fp, { volume: 1.3 }); cam.shake(0.6); E.burst(fp, { n: 18, speed: 3, color: [0.4, 0.33, 0.22], size: 0.12, life: 0.8, grav: 1.5 }); C.react('big'); A.crowdPop(1); break; }
         case 'over_top_rope': A.play('rope', p); C.react('big'); A.crowdPop(1); ui.feed(`${name(e.fighter)} goes OVER THE TOP!`); break;
         case 'table_break': A.play('table', p, { volume: 1.4 }); E.debris(p); cam.shake(0.6); cam.punch(4); C.react('big'); A.crowdPop(1.3); ui.banner('THROUGH THE TABLE!', '', 1500); break;
         case 'item_break': A.play('wood', p); E.debris(p); break;
@@ -624,6 +650,42 @@ export class Game {
         case 'env_damage': break;
       }
     }
+  }
+
+  /** Windshield smash: glass shards + blood at the car. */
+  carCrashFX(car) {
+    const p = new THREE.Vector3(car.pane ? car.pane.position.x : car.x, car.pane ? car.pane.position.y : 1.2, car.pane ? car.pane.position.z : car.z);
+    this.effects.burst(p, { n: 46, speed: 5, color: [0.78, 0.92, 1], size: 0.06, life: 1.1, additive: false, grav: 2.2, up: 1.5 }); // glass
+    this.effects.burst(p, { n: 20, speed: 3, color: [0.72, 0.02, 0.04], size: 0.1, life: 1.2, additive: false, grav: 2.4, up: 1 }); // blood
+    this.audio.play('metal', p, { volume: 1.3 });
+    this.audio.crowdPop?.(1.1);
+    this.camera.shake(0.5);
+  }
+
+  /** Ring girls (girl.glb) around ringside – shown for entrances + after the bell. */
+  buildRingGirls() {
+    const src = this.assets.props?.girl; if (!src) return;
+    this.ringGirls = [];
+    // normalise to ~1.7 m tall
+    const box = new THREE.Box3().setFromObject(src);
+    const h = Math.max(0.1, box.max.y - box.min.y);
+    const scale = 1.7 / h;
+    const spots = [[-4.6, 0, 4.6], [4.6, 0, 4.6], [-4.6, 0, -4.6], [4.6, 0, -4.6]];
+    for (const [x, y, z] of spots) {
+      const g = src.clone(true);
+      g.scale.setScalar(scale);
+      g.position.set(x, y, z);
+      g.rotation.y = Math.atan2(-x, -z); // face the ring
+      g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+      g.visible = false;
+      this.scene.add(g);
+      this.ringGirls.push(g);
+    }
+  }
+
+  setRingGirls(show) {
+    if (!this.ringGirls) return;
+    for (const g of this.ringGirls) g.visible = show;
   }
 
   /** Cartoonish KO gore: a spray of blood + a couple of limbs flung off. */

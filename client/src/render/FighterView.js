@@ -36,6 +36,21 @@ export class FighterView {
     this.lastHp = null;
   }
 
+  /** Swap the rendered model (e.g. Max's coat entrance model → normal Max). */
+  swapModel(assets, key) {
+    const inst = assets.instance(key);
+    if (!inst) return false;
+    if (this.mesh) this.model.remove(this.mesh);
+    this.inst = inst; this.mesh = inst.mesh; this.model.add(this.mesh);
+    this.solver = new PoseSolver(inst);
+    this.scale = this.c.height / inst.joints.headTop.y;
+    this.model.scale.setScalar(this.scale);
+    this.pelvisH = inst.joints.hips.y * this.scale;
+    this.model.position.y = -this.pelvisH;
+    this.anim = new Animator(this.solver, this.c);
+    return true;
+  }
+
   /** Soft contact shadow – grounds the wrestler even with low-res shadow maps. */
   makeContactShadow() {
     if (!FighterView.shadowTex) {

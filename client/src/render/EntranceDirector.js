@@ -20,10 +20,10 @@ const STAGE_Z = ARENA.entrance.zEnd + 2;      // where the wrestler appears on t
 const APPROACH_Z = ARENA.ring.apronHalf + 1.1; // ring-side, just before climbing in
 
 export class EntranceDirector {
-  constructor({ scene, camera, audio, arena, screens, commentary, ui, views, effects = null }) {
+  constructor({ scene, camera, audio, arena, screens, commentary, ui, views, effects = null, assets = null }) {
     this.scene = scene; this.camera = camera; this.audio = audio; this.arena = arena;
     this.screens = screens; this.commentary = commentary; this.ui = ui; this.views = views;
-    this.effects = effects;
+    this.effects = effects; this.assets = assets; this._swapped = null;
     this.t = 0;
     this.active = false;
     this._mediaFor = null;      // fighter id whose media is playing
@@ -121,6 +121,11 @@ export class EntranceDirector {
     if (en.fighterId != null && en.fighterId !== this._mediaFor) {
       this.startMedia(charId);
       this._mediaFor = en.fighterId; this._announced = false; this._coatThrown = false; this._firedEntry = false; this._shot = -1;
+      // Max walks out in his coat/hat/glasses model
+      const em = charId ? getEntrance(charId).entranceModel : null;
+      if (em && this.assets && this.views.get(en.fighterId)) {
+        if (this.views.get(en.fighterId).swapModel(this.assets, em)) this._swapped = en.fighterId;
+      }
     }
     this.drawTron(charId, en);
 
@@ -128,6 +133,11 @@ export class EntranceDirector {
     if (charId && !this._coatThrown && en.p > 0.5 && getEntrance(charId).coatThrow && f) {
       this._coatThrown = true;
       this.throwCoat(f);
+      // the coat comes off → become the normal in-ring model
+      if (this._swapped === en.fighterId && this.assets) {
+        this.views.get(en.fighterId)?.swapModel(this.assets, charId);
+        this._swapped = null;
+      }
     }
     this.updateProps(dt);
 
@@ -285,6 +295,7 @@ export class EntranceDirector {
     this.active = false;
     this.screens.suspended = false;
     this._mediaFor = null; this._announced = false; this._coatThrown = false; this._firedEntry = false; this._shot = -1;
+    if (this._swapped != null && this.assets) { const v = this.views.get(this._swapped); if (v) v.swapModel(this.assets, v.charId); this._swapped = null; }
     for (const p of this._props) { try { this.scene.remove(p.mesh); p.mesh.geometry.dispose?.(); p.mesh.material.dispose?.(); } catch { /* ignore */ } }
     this._props = [];
     try { this._song?.stop?.(); } catch { /* ignore */ }

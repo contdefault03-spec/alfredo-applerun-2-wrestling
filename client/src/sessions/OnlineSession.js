@@ -43,6 +43,7 @@ export class OnlineSession {
     for (const e of m.ev || []) this.pendingEvents.push(e);
     this.match = snap.match;
     if (m.rd) this.ringCells = m.rd;
+    this.arena.cageDoorBroken = !!m.cd;
     this.reconcile(snap.f.get(this.localId), m.ack?.seq || 0);
   }
 
@@ -96,7 +97,7 @@ export class OnlineSession {
     if (!a) { a = S_[0]; b = null; }
     const out = [];
     const latest = S_[S_.length - 1];
-    if (!a) return { fighters: this.fighters, items: [], referee: this.referee, match: this.match, ring: this.ringCells, rules: this.rules, localId: this.localId, time: 0 };
+    if (!a) return { fighters: this.fighters, items: [], referee: this.referee, match: this.match, ring: this.ringCells, cageDoor: this.arena.cageDoorBroken, rules: this.rules, localId: this.localId, time: 0 };
     const u = b ? Math.min(1, Math.max(0, (rt - a.time) / (b.time - a.time))) : 0;
     for (const f of this.fighters) {
       const fa = a.f.get(f.id), fb = b ? b.f.get(f.id) : null;
@@ -136,7 +137,7 @@ export class OnlineSession {
     });
     const ra = a.ref, rb = b?.ref;
     const referee = rb ? { ...ra, x: ra.x + (rb.x - ra.x) * u, y: ra.y + (rb.y - ra.y) * u, z: ra.z + (rb.z - ra.z) * u, yaw: rb.yaw } : ra;
-    return { fighters: out, items, referee, match: this.match, ring: this.ringCells, rules: this.rules, localId: this.localId, time: rt };
+    return { fighters: out, items, referee, match: this.match, ring: this.ringCells, cageDoor: this.arena.cageDoorBroken, rules: this.rules, localId: this.localId, time: rt };
   }
 
   abilityStatus(f) {
