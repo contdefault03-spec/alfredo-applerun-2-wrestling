@@ -64,6 +64,7 @@ class Human {
     this.scale = height; this.pelvisH = 0.52 * height;
     rig.mesh.scale.setScalar(height); rig.mesh.position.y = -this.pelvisH;
     this.pivot.add(rig.mesh);
+    this._procMesh = rig.mesh;            // the procedural body; removed once a GLB is supplied
     this.cur = newPose(); this.vel = new Float32Array(P.SIZE); this.tgt = newPose();
     applyOverrides(this.cur, RELAXED);
     this.phase = 0; this.time = Math.random() * 5;
@@ -82,6 +83,7 @@ class Human {
     const topY = rig.joints?.headTop?.y || 1;
     const sc = this.scale / topY;             // normalise the GLB to the NPC height
     if (this._rigMesh) this.pivot.remove(this._rigMesh);
+    if (this._procMesh) { this.pivot.remove(this._procMesh); this._procMesh = null; } // kill the duplicate procedural body
     rig.mesh.scale.setScalar(sc);
     this.pelvisH = (rig.joints?.hips?.y || 0.52) * sc;
     rig.mesh.position.y = -this.pelvisH;

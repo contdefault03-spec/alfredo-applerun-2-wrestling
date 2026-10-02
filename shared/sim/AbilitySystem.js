@@ -239,7 +239,11 @@ export class AbilitySystem {
         if (ok) w.emit('special_hit', { fighter: f.id, ability: ab.id, name: ab.name, victims: [v.id], pos: hb, damage: ab.damage });
       }
     }
-    if (t >= ab.duration && f.onGround) setState(f, S.IDLE);
+    // end on time whether or not he's landed – never leave him locked in the air until hit
+    if (t >= ab.duration) {
+      if (!f.onGround) { f.y = w.arena.groundFor(f.zone); f.onGround = true; f.vy = 0; }
+      f.vx = f.vz = 0; setState(f, S.IDLE);
+    }
   }
 
   // ── CAVE: spear ──

@@ -419,9 +419,9 @@ export class Animator {
         if (time < 0.9) {        // right hand flat on the chest
           set(t, 'handR', [-0.1, 0.1, 0.42]); set(t, 'elbowR', [0.9, -0.5, 0]);
           set(t, 'handL', [0.12, -0.5, 0.25]); set(t, 'chest', [-0.12, 0, 0]); set(t, 'head', [-0.2, 0, 0]);
-        } else if (time < 1.7) { // snap it up and out to a 45° salute at the sky
+        } else if (time < 1.7) { // snap it up and out to a ~30° salute at the sky
           const u = Math.min(1, (time - 0.9) / 0.35);
-          set(t, 'handR', [0.1, 0.1 + 0.75 * u, 0.42 + 0.1 * u]); set(t, 'elbowR', [0.3 + 0.2 * u, -0.3, 0]);
+          set(t, 'handR', [0.1, 0.1 + 0.5 * u, 0.42 + 0.2 * u]); set(t, 'elbowR', [0.3 + 0.2 * u, -0.3, 0]);
           set(t, 'chest', [-0.2, 0, 0]); set(t, 'head', [-0.35 * u, 0, 0]);
         } else {                 // big wave to the crowd
           set(t, 'handR', [0.1, 1.0, 0.15 + 0.35 * Math.sin(time * 7)]); set(t, 'elbowR', [0.2, -0.2, 0]);
