@@ -131,6 +131,10 @@ export class EntranceDirector {
     if (en.fighterId != null && en.fighterId !== this._mediaFor) {
       this.startMedia(charId);
       this._mediaFor = en.fighterId; this._announced = false; this._coatThrown = false; this._firedEntry = false; this._shot = -1; this._lastStomp = 0;
+      this.clearHandProp();
+      const cfg0 = charId ? getEntrance(charId) : null;
+      if (cfg0?.eatFood) this.spawnHandProp('food');
+      else if (cfg0?.cigarette) this.spawnHandProp('cig');
       // Max walks out in his coat/hat/glasses model
       const em = charId ? getEntrance(charId).entranceModel : null;
       if (em && this.assets && this.views.get(en.fighterId)) {
@@ -138,6 +142,7 @@ export class EntranceDirector {
       }
     }
     this.drawTron(charId, en);
+    if (f) this.updateHandProp(f, charId, en.p);
 
     // Ajan stomps at the tunnel before he walks out – shake, dust, booms
     if (charId === 'ajan' && getEntrance('ajan').stomps && en.p < 0.22) {
@@ -205,6 +210,48 @@ export class EntranceDirector {
     cam.lookAt(this._look);
     if (this.camera.pos) this.camera.pos.copy(cam.position);
     if (this.camera.focus) this.camera.focus.copy(this._look);
+  }
+
+  /** A handheld entrance prop: Ajan's food or Rize's cigarette. */
+  spawnHandProp(kind) {
+    let mesh;
+    if (kind === 'food') {
+      mesh = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshStandardMaterial({ color: 0x9a5a2a, roughness: 0.8 }));
+    } else {
+      const g = new THREE.Group();
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.13, 6), new THREE.MeshStandardMaterial({ color: 0xf4f0e4 }));
+      stick.rotation.z = Math.PI / 2; g.add(stick);
+      const ember = new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff5a1e }));
+      ember.position.x = 0.07; g.add(ember); mesh = g;
+    }
+    mesh.frustumCulled = false; this.scene.add(mesh);
+    this._handProp = { kind, mesh, eaten: false };
+  }
+  clearHandProp() {
+    if (!this._handProp) return;
+    try { this.scene.remove(this._handProp.mesh); } catch { /* ignore */ }
+    this._handProp = null;
+  }
+  updateHandProp(f, charId, p) {
+    const hp = this._handProp; if (!hp) return;
+    const h = (f.c?.height || 1.8);
+    const fw = { x: Math.sin(f.yaw), z: Math.cos(f.yaw) };
+    if (hp.kind === 'food') {
+      // eat it mid-walk: food leaves the hand (munch burst), reappears once in the ring
+      if (!hp.eaten && p > 0.45 && p < 0.86) {
+        hp.eaten = true; hp.mesh.visible = false;
+        this.effects?.burst({ x: f.x, y: f.y + h * 0.85, z: f.z }, { n: 16, speed: 1.6, color: [0.95, 0.5, 0.15], size: 0.06, life: 0.8, grav: 1.4 });
+        this.audio?.play?.('grunt', { x: f.x, y: f.y + 1.4, z: f.z }, { pitch: 0.8 });
+      }
+      if (hp.eaten && p >= 0.9) hp.mesh.visible = true; // back in the ring, food's back in hand
+      // hold it up near the mouth/hand
+      hp.mesh.position.set(f.x + fw.x * 0.28, f.y + h * 0.72, f.z + fw.z * 0.28);
+    } else {
+      // cigarette at the mouth, occasional smoke puff
+      hp.mesh.position.set(f.x + fw.x * 0.22, f.y + h * 0.86, f.z + fw.z * 0.22);
+      hp.mesh.rotation.y = f.yaw;
+      if (Math.random() < 0.06) this.effects?.burst({ x: f.x + fw.x * 0.3, y: f.y + h * 0.9, z: f.z + fw.z * 0.3 }, { n: 3, speed: 0.4, color: [0.7, 0.7, 0.72], size: 0.07, life: 1.3, additive: false, grav: -0.4, up: 1.2 });
+    }
   }
 
   /**
@@ -400,6 +447,7 @@ export class EntranceDirector {
     if (!this.active && !this._song && !this.video && !this._winner) return;
     this.active = false; this._winner = null;
     this.screens.suspended = false;
+    this.clearHandProp();
     this._mediaFor = null; this._announced = false; this._coatThrown = false; this._firedEntry = false; this._shot = -1;
     if (this._swapped != null && this.assets) { const v = this.views.get(this._swapped); if (v) v.swapModel(this.assets, v.charId); this._swapped = null; }
     for (const p of this._props) { try { this.scene.remove(p.mesh); p.mesh.geometry.dispose?.(); p.mesh.material.dispose?.(); } catch { /* ignore */ } }
