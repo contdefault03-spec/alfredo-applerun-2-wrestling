@@ -124,9 +124,12 @@ export class Arena {
             if (ix - Math.abs(e.x) <= iz - Math.abs(e.z)) { const s = Math.sign(e.x) || 1; e.x = s * ix; if (Math.sign(e.vx) !== s) e.vx = 0; }
             else { const s = Math.sign(e.z) || 1; e.z = s * iz; if (Math.sign(e.vz) !== s) e.vz = 0; }
           }
-        } else if (e.z > bz && Math.abs(e.x) < wx) {
-          // entrance walkway
+        } else if (e.z > bz && Math.abs(e.x) < E.halfRamp - r) {
+          // the whole entrance front is open – walk straight out onto the ramp/stage
+          // (past the barricade) to reach the cars; no invisible wall here.
           if (e.z > E.zEnd - r) { e.z = E.zEnd - r; if (e.vz > 0) e.vz = 0; }
+          const rx = E.halfRamp - r;
+          if (Math.abs(e.x) > rx) { const s = Math.sign(e.x); e.x = s * rx; if (Math.sign(e.vx) === s) e.vx = 0; }
         } else {
           if (Math.abs(e.x) > bx) { const s = Math.sign(e.x); hit('barricade', -s, 0); e.x = s * bx; if (Math.sign(e.vx) === s) e.vx = 0; }
           if (Math.abs(e.z) > bz) { const s = Math.sign(e.z); hit('barricade', 0, -s); e.z = s * bz; if (Math.sign(e.vz) === s) e.vz = 0; }

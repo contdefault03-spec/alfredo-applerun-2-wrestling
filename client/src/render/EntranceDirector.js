@@ -215,20 +215,27 @@ export class EntranceDirector {
     if (!this.effects) return;
     if (p < 0.08 || p > 0.92) return;              // only while they're on the stage/aisle
     this._sideFireT = (this._sideFireT || 0) + dt;
-    if (this._sideFireT < 0.07) return;            // pulse ~14x/sec
+    if (this._sideFireT < 0.05) return;            // pulse ~20x/sec for a continuous blaze
     this._sideFireT = 0;
     const halfX = ARENA.entrance.halfX + 0.35;     // just outside the aisle edges
     const wz = f.z;                                // flames bracket the walker
-    const zs = [wz + 1.4, wz, wz - 1.4];
+    const zs = [wz + 2.0, wz + 0.9, wz, wz - 0.9, wz - 2.0];  // a longer line of fire down the aisle
+    const flick = 0.8 + Math.random() * 0.6;       // flicker the intensity
     for (const s of [-1, 1]) {
       for (const z of zs) {
         if (z < ARENA.ring.apronHalf - 0.5) continue; // don't spew fire inside the ring
         const base = { x: s * halfX, y: 0.1, z };
-        this.effects.burst(base, { n: 10, speed: 1.4, color: [1, 0.5 + Math.random() * 0.35, 0.08], size: 0.18, life: 0.55, additive: true, grav: -3.4, up: 6.5 });
-        this.effects.burst(base, { n: 4, speed: 0.8, color: [0.25, 0.22, 0.2], size: 0.22, life: 0.9, additive: false, grav: -0.6, up: 2.2 }); // smoke
+        // tall roaring body – deep orange, rising fast (realistic jet of flame)
+        this.effects.burst(base, { n: 16, speed: 1.6, color: [1, 0.42 + Math.random() * 0.3, 0.05], size: 0.22 * flick, life: 0.7, additive: true, grav: -4.2, up: 9 * flick });
+        // bright yellow-white core at the base
+        this.effects.burst({ x: base.x, y: 0.1, z }, { n: 8, speed: 1.1, color: [1, 0.9, 0.5], size: 0.14, life: 0.4, additive: true, grav: -3.0, up: 6 });
+        // dark smoke curling up above the flame
+        this.effects.burst({ x: base.x, y: 0.6, z }, { n: 5, speed: 0.7, color: [0.18, 0.16, 0.15], size: 0.3, life: 1.2, additive: false, grav: -0.5, up: 2.6 });
+        // orange embers drifting
+        if (Math.random() < 0.5) this.effects.burst({ x: base.x, y: 0.4, z }, { n: 3, speed: 2.2, color: [1, 0.6, 0.2], size: 0.05, life: 1.1, additive: true, grav: -1.2, up: 4 });
       }
     }
-    if (Math.random() < 0.12) this.audio.play?.('whoosh', { x: 0, y: 0.5, z: wz }, { volume: 0.5 });
+    if (Math.random() < 0.18) this.audio.play?.('whoosh', { x: 0, y: 0.5, z: wz }, { volume: 0.6 });
   }
 
   /** Fire jets (pyro) at the ring + stage – replaces confetti for entrances. */

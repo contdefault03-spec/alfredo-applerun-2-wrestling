@@ -441,7 +441,7 @@ export class Game {
     // Use the live world locally (exact positions); online falls back to the interpolated view.
     const carFighters = this.session.world?.fighters ?? view.fighters;
     for (const f of carFighters) {
-      if (!f.outside || f.hidden) continue;
+      if (f.hidden) continue;        // carNear bounds it to a real car, so any fighter at one can smash it
       const spd = Math.hypot(f.vx || 0, f.vz || 0);
       if (spd < 4 && !['down', 'knockdown', 'airborne'].includes(f.state)) continue;
       const car = this.arena.carNear(f.x, f.z, 2.4);
