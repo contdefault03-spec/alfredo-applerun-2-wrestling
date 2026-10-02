@@ -1,7 +1,7 @@
 // GrappleSystem – grabs, holds, escapes, reversals, slams, throws, Irish whips.
 import { ATTACKS } from '../config/attacks.js';
 import { ARENA } from '../config/arena.js';
-import { BTN, S, ZONE, DOWN_STATES, HEAVY_SLAM_WEIGHT } from './constants.js';
+import { BTN, S, ZONE, DOWN_STATES, RING_BREAK_CHANCE } from './constants.js';
 import { setState, forwardOf, dist2D, scaleOf, angleTo, turnToward } from './Fighter.js';
 import { moveId } from './FighterController.js';
 
@@ -202,7 +202,7 @@ export class GrappleSystem {
         f.stats.damage += dmg; f.meter = Math.min(100, f.meter + dmg * 0.09); v.meter = Math.min(100, v.meter + dmg * 0.05);
         const pos = { x: v.x, y: ground, z: v.z };
         w.emit('slam', { attacker: f.id, victim: v.id, damage: dmg, move: m.id, moveName: f.moveSpecial?.name ?? m.name, pos, special: !!f.moveSpecial, crowd: m.crowd ?? 0.6 });
-        if (v.zone === ZONE.RING && f.c.weight >= HEAVY_SLAM_WEIGHT) w.ring?.registerImpact(pos.x, pos.z);
+        if (v.zone === ZONE.RING && f.moveSpecial) w.ring?.breakChance(pos.x, pos.z, RING_BREAK_CHANCE); // special slams can smash the ring
         w.emit('hit', { attacker: f.id, victim: v.id, damage: dmg, move: m.id, moveName: f.moveSpecial?.name ?? m.name, sound: 'slam', reaction: 'knockdown', pos, heavy: true, special: !!f.moveSpecial, crowd: m.crowd ?? 0.6 });
         if (f.moveSpecial) w.emit('special_hit', { fighter: f.id, victim: v.id, ability: f.moveSpecial.id, name: f.moveSpecial.name, pos, damage: dmg });
         w.items.checkTableBreak(v, 12);

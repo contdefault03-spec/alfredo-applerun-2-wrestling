@@ -78,6 +78,20 @@ test('no fall-through outside the live phase', () => {
   assert.equal(f.underRing, false, 'frozen wrestlers do not fall during entrances');
 });
 
+test('breakChance smashes a section outright (forced), and respects probability', () => {
+  const w = live();
+  const k = w.ring.cellOf(0, 0);
+  // p=0 never breaks
+  for (let i = 0; i < 50; i++) assert.equal(w.ring.breakChance(0, 0, 0), false);
+  assert.equal(w.ring.level(k), 0);
+  // testForce guarantees a break (used for the screenshot test)
+  w.ring.testForce = true;
+  assert.equal(w.ring.breakChance(0, 0, 0), true);
+  assert.ok(w.ring.isBroken(0, 0));
+  // already broken → no-op
+  assert.equal(w.ring.breakChance(0, 0, 1), false);
+});
+
 test('underRing + ring damage survive the network snapshot', () => {
   const w = live();
   for (let i = 0; i < RING_BREAK_HITS; i++) w.ring.registerImpact(0, 0);

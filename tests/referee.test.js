@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { World } from '../shared/sim/World.js';
-import { DT, S, REF_WARN_HITS, REF_HEAT_WINDOW, REF_DOWN_TIME } from '../shared/sim/constants.js';
+import { DT, S, REF_WARN_HITS, REF_HEAT_WINDOW, REF_DOWN_TIME, REF_DEATHS } from '../shared/sim/constants.js';
 import { encodeReferee, decodeReferee } from '../shared/net/protocol.js';
 
 function live(chars = ['ajan', 'lucky']) {
@@ -73,6 +73,21 @@ test('ground-attack heat decays, so stale heat does not trigger', () => {
   a.refHeat = REF_WARN_HITS; a.refHeatT = w.time - (REF_HEAT_WINDOW + 1); // old
   w.step();
   assert.equal(w.match.referee.state, 'watch', 'stale heat is ignored');
+});
+
+test('the ref is out for good after enough slams', () => {
+  const w = live(); const a = w.byId(1); const ref = w.match.referee;
+  for (let s = 0; s < REF_DEATHS; s++) {
+    if (ref.state === 'down') { ref.downT = 0; w.step(); } // let him get back up
+    a.refHeat = REF_WARN_HITS; a.refHeatT = w.time; w.step();
+    assert.equal(ref.state, 'warn', 'warn on slam ' + s);
+    ref.x = a.x; ref.z = a.z;
+    assert.equal(w.match.grabReferee(a.id), true);
+  }
+  assert.equal(w.match.referee.dead, true, 'ref is dead');
+  // never recovers
+  for (let i = 0; i < Math.ceil(REF_DOWN_TIME / DT) + 60; i++) w.step();
+  assert.equal(w.match.referee.state, 'down', 'stays down for the rest of the match');
 });
 
 test('referee warn state + warnTarget survive the snapshot', () => {

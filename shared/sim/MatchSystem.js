@@ -4,7 +4,7 @@
 import { ARENA } from '../config/arena.js';
 import { getEntrance } from '../config/entrances.js';
 import { S, ZONE, DOWN_STATES, REF_WARN_HITS, REF_HEAT_WINDOW, REF_WARN_TIME, REF_DOWN_TIME, REF_GRAB_RANGE,
-  HIGH_DROP_RADIUS, HIGH_DROP_DAMAGE, HIGH_DROP_SELF } from './constants.js';
+  HIGH_DROP_RADIUS, HIGH_DROP_DAMAGE, HIGH_DROP_SELF, REF_DEATHS } from './constants.js';
 import { setState, dist2D, isAlive, hpFrac, angleTo, turnToward } from './Fighter.js';
 
 const R = ARENA.ring;
@@ -24,7 +24,7 @@ export class MatchSystem {
     this.pin = null;
     this.winnerTeam = null; this.winners = []; this.method = null;
     this.elimOrder = [];
-    this.referee = { x: 0, y: R.height, z: -1.5, yaw: 0, zone: ZONE.RING, state: 'watch', count: 0, t: 0, focus: null, warnTarget: null, warnT: 0, downT: 0 };
+    this.referee = { x: 0, y: R.height, z: -1.5, yaw: 0, zone: ZONE.RING, state: 'watch', count: 0, t: 0, focus: null, warnTarget: null, warnT: 0, downT: 0, grabCount: 0, dead: false };
     // ── entrance state (authoritative; mirrored to clients in the snapshot) ──
     this.entranceOrder = [];      // fighter ids, in entry order
     this.entranceIndex = -1;      // -1 = not started yet
@@ -394,8 +394,10 @@ export class MatchSystem {
     if (!f || !isAlive(f) || f.hidden) return false;
     if (Math.hypot(ref.x - f.x, ref.z - f.z) > REF_GRAB_RANGE) return false;
     ref.state = 'down'; ref.downT = REF_DOWN_TIME; ref.warnTarget = null; ref.blocked = false;
+    ref.grabCount = (ref.grabCount || 0) + 1;
     f.refHeat = 0;
-    w.emit('ref_grabbed', { fighter: fighterId });
+    w.emit('ref_grabbed', { fighter: fighterId, count: ref.grabCount });
+    if (ref.grabCount >= REF_DEATHS) { ref.dead = true; w.emit('ref_dead', { by: fighterId }); } // out for the rest of the match
     return true;
   }
 
@@ -414,8 +416,8 @@ export class MatchSystem {
     if (ref.state === 'down') {
       ref.downT -= dt;
       ref.y += ((w.arena.isInsideRingSquare(ref.x, ref.z) ? R.height : 0) - ref.y) * Math.min(1, dt * 6);
-      if (ref.downT <= 0) { ref.state = 'watch'; ref.warnTarget = null; w.emit('ref_recover', {}); }
-      return;
+      if (ref.downT <= 0 && !ref.dead) { ref.state = 'watch'; ref.warnTarget = null; w.emit('ref_recover', {}); }
+      return; // a dead ref never gets back up
     }
     this.checkInterference(dt);
     let tx = ref.x, tz = ref.z, speed = 2.4, face = null;

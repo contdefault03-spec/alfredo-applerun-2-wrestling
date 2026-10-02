@@ -211,7 +211,7 @@ export class ArenaView {
   buildRingDamage() {
     this.ringDmgCells = [];
     this.ringDmgState = [];
-    const crackMat = new THREE.MeshBasicMaterial({ color: 0x0c0c10, transparent: true, opacity: 0.6, toneMapped: false });
+    const crackMat = new THREE.MeshBasicMaterial({ color: 0x15151a, transparent: true, opacity: 0.7, toneMapped: false });
     const holeMat = new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false });
     this._ringDmgMats = { crack: crackMat, hole: holeMat };
     const geo = new THREE.PlaneGeometry(CELL * 0.96, CELL * 0.96).rotateX(-Math.PI / 2);
@@ -253,7 +253,9 @@ export class ArenaView {
       if (lvl === 0) { m.visible = false; continue; }
       m.visible = true;
       m.material = lvl === 2 ? this._ringDmgMats.hole : this._ringDmgMats.crack;
-      m.position.y = lvl === 2 ? R.height - 0.06 : R.height + 0.02; // a hole sits below the canvas
+      // draw on top of the canvas so it reads from above (a hole is a black void)
+      m.position.y = R.height + (lvl === 2 ? 0.04 : 0.02);
+      m.renderOrder = 3;
     }
   }
 

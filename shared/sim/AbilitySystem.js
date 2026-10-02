@@ -1,7 +1,7 @@
 // AbilitySystem – character specials (meter + cooldown managed).
 import { ABILITIES } from '../config/abilities.js';
 import { ARENA } from '../config/arena.js';
-import { S, ZONE, FREE_STATES } from './constants.js';
+import { S, ZONE, FREE_STATES, RING_BREAK_CHANCE } from './constants.js';
 import { setState, forwardOf, dist2D, angleTo, turnToward, scaleOf, isAlive } from './Fighter.js';
 
 const R = ARENA.ring;
@@ -155,7 +155,7 @@ export class AbilitySystem {
     w.items.checkTableBreak(f, 12);
     const pos = { x: f.x, y: f.y, z: f.z };
     w.emit('impact', { fighter: f.id, pos, power: 1.0, ring: f.zone === ZONE.RING });
-    if (ab.id === 'ajan_crush' && f.zone === ZONE.RING) w.ring?.registerImpact(pos.x, pos.z);
+    if (ab.id === 'ajan_crush' && f.zone === ZONE.RING) w.ring?.breakChance(pos.x, pos.z, RING_BREAK_CHANCE);
     if (victims.length) {
       // the event the client uses to play Ajan.mp3 + the cinematic camera
       w.emit('special_hit', { fighter: f.id, ability: ab.id, name: ab.name, victims, pos, sound: ab.sound, event: ab.hitEvent, damage: ab.damage });
