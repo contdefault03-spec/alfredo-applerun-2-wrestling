@@ -465,6 +465,9 @@ export class Game {
       const idx = Math.min(order.length - 1, Math.floor(t / (4.2 / Math.max(1, order.length))));
       const f = order[idx];
       if (f) this.camera.update(dt, { menu: { kind: 'showcase', subject: { x: f.x, y: f.y, z: f.z, height: f.c.height }, angle: f.yaw + 0.35 } });
+    } else if (me && (me.state === S.RAFTER || me.state === S.RAFTER_CLIMB || me.state === S.RAFTER_DROP)) {
+      // up on the zipline / overhead – pull the camera back and high so you can see the ring below and aim
+      this.camera.update(dt, { menu: { kind: 'showcase', subject: { x: me.x, y: 3.2, z: me.z, height: 7 }, angle: 0.5 } });
     } else {
       this.introT = 0;
       this.camera.update(dt, { me, opp, look });
@@ -496,8 +499,8 @@ export class Game {
     if (st === S.DOWN || st === S.KNOCKDOWN) return [{ key: 'MASH', text: 'to get up faster' }];
     if (st === S.CORNER_STUN) return [{ key: 'MASH', text: 'to recover' }];
     if (st === S.HOLD) return [{ key: 'WASD', text: 'Drag them' }, { key: 'J', text: 'Strike' }, { key: 'K', text: 'Slam (S+K: suplex)' }, { key: 'G', text: 'Throw / Irish whip' }, ...(ab?.kind === 'grapple' ? [{ key: 'X', text: ab.name, hot: me.meter >= me.c.specialCost && me.specialCd <= 0 }] : [])];
-    if (st === S.PERCH) return [{ key: 'J / K', text: 'DIVE!', hot: true }, { key: 'SHIFT + F', text: 'Climb to the rafters' }, { key: 'F', text: 'Climb down' }];
-    if (st === S.RAFTER) return [{ key: 'WASD', text: 'Move out over the ring' }, { key: 'F / J', text: 'HIGH DROP!', hot: true }];
+    if (st === S.PERCH) return [{ key: 'J / K', text: 'DIVE!', hot: true }, { key: 'F', text: 'Climb down' }];
+    if (st === S.RAFTER) return [{ key: 'WASD', text: 'Aim your landing' }, { key: 'F / J', text: 'ZIPLINE DROP!', hot: true }];
     if (st === S.RAFTER_CLIMB || st === S.RAFTER_DROP) return [];
     if (st === S.CAGE_CLIMB) return [{ key: 'W / S', text: 'Climb' }, { key: 'J', text: 'Dive off!', hot: me.y > 1.2 }, { key: 'F', text: 'Drop' }];
     if (me.itemType) out.push({ key: 'J', text: 'Swing' }, { key: 'K', text: 'Smash' }, { key: 'G', text: 'Throw' }, { key: 'F', text: 'Drop' });
@@ -524,7 +527,8 @@ export class Game {
           const R = ARENA.ring, B = ARENA.barricade, reach = 1.0 + me.c.radius;
           if (view.rules.cage && ARENA.cage.half - Math.max(Math.abs(me.x), Math.abs(me.z)) < 0.9 + me.c.radius) out.push({ key: 'F', text: 'Climb the cell' });
           else if (me.outside) {
-            if (Math.abs(me.x) < B.halfX + reach && Math.abs(me.z) < B.halfZ + reach) out.push({ key: 'F', text: 'Vault back over', hot: true });
+            if (Math.abs(me.x) < 3.2 && me.z < -(B.halfZ - 0.1)) out.push({ key: 'F', text: 'Take the ZIPLINE up', hot: true });
+            else if (Math.abs(me.x) < B.halfX + reach && Math.abs(me.z) < B.halfZ + reach) out.push({ key: 'F', text: 'Vault back over', hot: true });
           } else {
             const dx = Math.abs(me.x) - R.apronHalf, dz = Math.abs(me.z) - R.apronHalf;
             const d = dx > 0 && dz > 0 ? Math.hypot(dx, dz) : Math.max(dx, dz);

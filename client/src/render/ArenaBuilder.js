@@ -69,6 +69,23 @@ export class ArenaView {
     this.buildStands();
     this.buildLights();
     this.buildCage();
+    this.buildZipline();
+  }
+
+  /** A zipline from a platform in the back stands up over the ring (the overhead-drop route). */
+  buildZipline() {
+    const B = ARENA.barricade, topY = 7.2, startZ = -(B.halfZ + 1.2);
+    const metal = std({ color: 0x1a1c22, roughness: 0.5, metalness: 0.85 });
+    // launch platform + support tower at the back
+    add(this.group, new THREE.BoxGeometry(2.4, 0.2, 1.6), metal, { pos: [0, topY, startZ] });
+    for (const sx of [-1, 1]) add(this.group, new THREE.CylinderGeometry(0.1, 0.12, topY, 10), metal, { pos: [sx * 1.0, topY / 2, startZ] });
+    // the cable itself, sloping down from the platform to above the ring centre
+    const a = new THREE.Vector3(0, topY + 0.2, startZ), bpt = new THREE.Vector3(0, topY - 0.4, 0.3);
+    const len = a.distanceTo(bpt);
+    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 6), std({ color: 0x0a0a0c, metalness: 0.7, roughness: 0.4 }));
+    cable.position.copy(a).lerp(bpt, 0.5);
+    cable.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bpt.clone().sub(a).normalize());
+    cable.frustumCulled = false; this.group.add(cable);
   }
 
   // ── floor & mats ──
