@@ -456,19 +456,49 @@ export class FighterController {
 
   // ── rafters + high drop ─────────────────────────────────────────────────
   startRafterClimb(f) {
+    // Physical route, not a teleport: run up the stairs to the back-stands tower,
+    // pull up onto the platform, then ride the cable out over the ring.
     const inset = R.postInset - 0.2;
     const sx = Math.sign(f.x) || 1, sz = Math.sign(f.z) || 1;
-    setState(f, S.RAFTER_CLIMB, 1.1 / Math.sqrt(f.c.recoverySpeed));
-    f.path = { x0: f.x, y0: f.y, z0: f.z, x1: sx * inset, y1: RAFTER_Y, z1: sz * inset };
+    const towerZ = -(ARENA.barricade.halfZ + 1.2);
+    setState(f, S.RAFTER_CLIMB, 1.7 / Math.sqrt(f.c.recoverySpeed));
+    f.path = {
+      x0: f.x, y0: f.y, z0: f.z,
+      sx: 0, sz: towerZ, sy: RAFTER_Y,            // top of the stairs / launch platform
+      x1: sx * inset, y1: RAFTER_Y, z1: sz * inset, // out along the cable, over the ring
+    };
     f.vx = f.vy = f.vz = 0; f.onGround = false;
     this.world.emit('rafter_climb', { fighter: f.id });
   }
 
   rafterClimbUpdate(f, dt) {
-    const p = f.path, t = Math.min(1, f.stateTime / f.stateDur), e = t * t * (3 - 2 * t);
-    f.x = p.x0 + (p.x1 - p.x0) * e; f.z = p.z0 + (p.z1 - p.z0) * e; f.y = p.y0 + (p.y1 - p.y0) * e;
+    const p = f.path, t = Math.min(1, f.stateTime / f.stateDur);
+    // 0 .. 0.60  climb the stairs up to the platform (stepped rise)
+    // 0.60 .. 0.75 hang/pull up onto the structure
+    // 0.75 .. 1   travel the zipline out over the ring
+    if (t < 0.6) {
+      const u = t / 0.6, e = u * u * (3 - 2 * u);
+      f.x = p.x0 + (p.sx - p.x0) * e;
+      f.z = p.z0 + (p.sz - p.z0) * e;
+      // stepped climb so it reads as stairs rather than a smooth ramp
+      const steps = 6;
+      const stair = Math.min(1, (Math.floor(e * steps) + (e * steps % 1) * 0.55) / steps);
+      f.y = p.y0 + (p.sy - 0.9 - p.y0) * stair;
+      f.sub = 0;
+    } else if (t < 0.75) {
+      const u = (t - 0.6) / 0.15;
+      f.x = p.sx; f.z = p.sz;
+      f.y = (p.sy - 0.9) + 0.9 * (u * u * (3 - 2 * u));   // pull up onto the platform
+      f.sub = 1;
+    } else {
+      const u = (t - 0.75) / 0.25, e = u * u * (3 - 2 * u);
+      f.x = p.sx + (p.x1 - p.sx) * e;
+      f.z = p.sz + (p.z1 - p.sz) * e;
+      f.y = p.sy;
+      f.sub = 2;
+    }
     f.vx = f.vy = f.vz = 0; f.onGround = false;
-    if (t >= 1) { setState(f, S.RAFTER); f.y = RAFTER_Y; f.path = null; this.world.emit('rafter_top', { fighter: f.id }); }
+    if (t >= 1) { setState(f, S.RAFTER); f.y = RAFTER_Y; f.path = null; f.sub = 0; this.world.emit('rafter_top', { fighter: f.id }); }
   }
 
   rafterUpdate(f, dt) {

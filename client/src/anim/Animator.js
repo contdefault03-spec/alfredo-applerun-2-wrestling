@@ -14,6 +14,8 @@ const TWO_PI = Math.PI * 2;
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const sm = (u) => { u = clamp01(u); return u * u * (3 - 2 * u); };
 
+let RELAX_REF = null;   // natural hanging-arm reference pose (built once)
+
 export class Animator {
   constructor(solver, character) {
     this.solver = solver;
@@ -150,12 +152,15 @@ export class Animator {
       add(t, 'spine', [0.1 * k, 0, 0]);
     }
     if (arm > 0.3) {
-      const k = Math.min(1, (arm - 0.3) / 0.7);
-      // let the arm fall out of guard and hang
-      const cur = [t[P.handR], t[P.handR + 1], t[P.handR + 2]];
-      set(t, 'handR', [cur[0] * (1 - k), cur[1] * (1 - k) - 0.55 * k, cur[2] * (1 - k) + 0.08 * k]);
-      add(t, 'elbowR', [0.25 * k, -0.2 * k, 0]);
-      add(t, 'chest', [0, -0.12 * k, 0]);                        // shoulder drops
+      // blend the arm OUT of guard toward its natural hanging pose – staying inside
+      // the IK's reach so the limb never stretches or flips
+      const k = Math.min(1, (arm - 0.3) / 0.7) * 0.85;
+      if (!RELAX_REF) { RELAX_REF = newPose(); applyOverrides(RELAX_REF, RELAXED); }
+      for (let i = 0; i < 3; i++) {
+        t[P.handR + i] += (RELAX_REF[P.handR + i] - t[P.handR + i]) * k;
+        t[P.elbowR + i] += (RELAX_REF[P.elbowR + i] - t[P.elbowR + i]) * k;
+      }
+      add(t, 'chest', [0, -0.1 * k, 0]);                         // shoulder drops
     }
   }
 
