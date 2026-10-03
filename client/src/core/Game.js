@@ -23,6 +23,7 @@ import { makeBeltMesh } from '../render/Belt.js';
 import { ScreenDirector } from '../render/ScreenDirector.js';
 import { EntranceDirector } from '../render/EntranceDirector.js';
 import { CameraSystem } from '../camera/CameraSystem.js';
+import { TouchControls } from './TouchControls.js';
 import { AudioSystem } from '../audio/AudioSystem.js';
 import { CommentarySystem } from '../commentary/CommentarySystem.js';
 import { UIManager, TEAM_COLORS } from '../ui/UIManager.js';
@@ -43,6 +44,7 @@ export class Game {
     this.input = new Input(canvas);
     this.audio = new AudioSystem(this.settings);
     this.camera = new CameraSystem(this.renderer.camera, this.settings);
+    this.touch = new TouchControls(this.input);
     this.net = new NetClient();
     this.session = null;
     this.views = new Map();
@@ -124,7 +126,12 @@ export class Game {
       const opps = (qs.get('opp') || 'lucky').split(','), teams = (qs.get('teams') || '').split(',').filter(Boolean).map(Number);
       this.startLocalMatch(qs.get('mode') || 'normal', opps.map((c, i) => ({ charId: c, team: teams[i] ?? i + 1, difficulty: qs.get('diff') || 'normal' })), qs.get('char') || undefined);
     }
-    else this.showMainMenu();
+    else if (!this.settings.get().inputMode) {
+      this.ui.showInputPicker({
+        suggest: TouchControls.likelyMobile() ? 'mobile' : 'pc',
+        onPick: (mode) => { this.settings.set({ inputMode: mode }); this.applyInputMode(); this.showMainMenu(); },
+      });
+    } else { this.applyInputMode(); this.showMainMenu(); }
   }
 
   // ── menus ─────────────────────────────────────────────
@@ -140,9 +147,17 @@ export class Game {
     this.showcaseState = { x: 0, y: ARENA.ring.height, z: 0.4, yaw: 0.35, state: S.IDLE, stateTime: 0, vx: 0, vz: 0 };
   }
 
+  /** Show/hide the on-screen controls for the chosen input mode (PC is unchanged). */
+  applyInputMode() {
+    const mobile = this.settings.get().inputMode === 'mobile';
+    this.touch?.show(mobile && this.state === 'match');
+    return mobile;
+  }
+
   showMainMenu() {
     this.endMatchCleanup();
     this.state = 'menu';
+    this.touch?.show(false);
     this.ui.clearMenus();
     this.setShowcase(this.settings.get().lastChar);
     this.audio.startMusic();
@@ -156,7 +171,7 @@ export class Game {
       vsai: () => this.setupMenu('normal'),
       modes: () => this.ui.showModes({ onPick: (m) => { this.ui.unmount('modes'); this.setupMenu(m); }, onBack: () => this.ui.unmount('modes') }),
       chars: () => this.charSelect(() => this.showMainMenu()),
-      settings: () => this.ui.showSettings({ onBack: () => this.ui.unmount('settings') }),
+      settings: () => this.ui.showSettings({ onBack: () => this.ui.unmount('settings'), onChange: (k) => { if (k === 'inputMode') this.applyInputMode(); } }),
     });
   }
 
@@ -246,6 +261,7 @@ export class Game {
     this.audio.stopMusic();
     this.session = session;
     this.state = 'match';
+    this.applyInputMode();   // mobile: raise the on-screen controls for the match
     this.paused = false;
     this.arena.setMode(session.rules);
     this.camera.cage = !!session.rules.cage;

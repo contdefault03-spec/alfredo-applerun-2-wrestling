@@ -111,6 +111,19 @@ export class UIManager {
     render();
   }
 
+  /** First-run input chooser: PC keyboard/mouse or on-screen mobile controls. */
+  showInputPicker({ suggest = 'pc', onPick }) {
+    const e = this.mount('inputpick', `<div class="screen overlay"><div class="center-panel panel">
+      <h2>HOW ARE YOU PLAYING?</h2>
+      <div class="dim" style="text-align:center">Same game, same servers — only the controls change. You can switch later in Settings.</div>
+      <div class="inputpick">
+        <div class="pick" data-m="pc"><div class="big">PC</div><div class="dim">Keyboard &amp; mouse<br>WASD · J/K · E · F · X</div></div>
+        <div class="pick" data-m="mobile"><div class="big">MOBILE</div><div class="dim">On-screen stick<br>&amp; touch buttons</div></div>
+      </div></div></div>`);
+    const hi = e.querySelector(`[data-m="${suggest}"]`); if (hi) hi.style.borderColor = 'var(--gold2,#ffd24a)';
+    e.querySelectorAll('.pick').forEach((n) => n.addEventListener('click', () => { this.unmount('inputpick'); onPick?.(n.dataset.m); }));
+  }
+
   // ── game modes list ──
   showModes({ onPick, onBack }) {
     const e = this.mount('modes', `<div class="screen overlay"><div class="center-panel panel"><button class="btn small close-x" data-a="back">BACK</button>
@@ -284,12 +297,14 @@ export class UIManager {
       <span>Mouse sensitivity</span><input type="range" min="0.2" max="3" step="0.1" data-k="mouseSens" value="${s.mouseSens}" />
       <span>Invert camera Y</span><select class="field" data-k="invertY"><option value="false">No</option><option value="true">Yes</option></select>
       <span>Show controls in match</span><select class="field" data-k="showControls"><option value="true">Yes</option><option value="false">No</option></select>
+      <span>Controls</span><select class="field" data-k="inputMode"><option value="pc">PC (keyboard &amp; mouse)</option><option value="mobile">Mobile (on-screen)</option></select>
       </div></div></div>`);
     e.querySelector('[data-k=voice]').value = s.voice;
     e.querySelector('[data-k=aiCommentary]').value = String(s.aiCommentary);
     e.querySelector('[data-k=cameraMode]').value = s.cameraMode;
     e.querySelector('[data-k=invertY]').value = String(s.invertY);
     e.querySelector('[data-k=showControls]').value = String(s.showControls);
+    e.querySelector('[data-k=inputMode]').value = s.inputMode || 'pc';
     e.querySelectorAll('[data-k]').forEach((inp) => inp.addEventListener('input', () => {
       let v = inp.value; if (inp.type === 'range') v = +v; if (v === 'true') v = true; if (v === 'false') v = false;
       this.settings.set({ [inp.dataset.k]: v }); onChange?.(inp.dataset.k, v);

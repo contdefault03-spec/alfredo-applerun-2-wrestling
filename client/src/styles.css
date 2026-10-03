@@ -153,3 +153,26 @@ input, select { font-family: var(--body); font-size: 16px; }
   .slot > :nth-child(4), .slot > :nth-child(5) { grid-column: span 1; }
   .help { display: none; }
 }
+
+/* ── mobile on-screen controls (only shown when input mode = mobile) ───────── */
+#touch { position: fixed; inset: 0; z-index: 60; pointer-events: none; display: none; touch-action: none; }
+#touch .t-stick { position: absolute; left: 22px; bottom: 22px; width: 132px; height: 132px; border-radius: 50%;
+  background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.22); pointer-events: auto; touch-action: none; }
+#touch .t-knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%;
+  background: rgba(255,255,255,.3); border: 2px solid rgba(255,255,255,.5); transition: transform .04s linear; }
+#touch .t-look { position: absolute; left: 170px; right: 230px; top: 0; bottom: 0; pointer-events: auto; touch-action: none; }
+#touch .t-pad { position: absolute; right: 16px; bottom: 16px; width: 212px; display: grid; grid-template-columns: repeat(4, 48px);
+  gap: 8px; justify-content: end; pointer-events: auto; }
+#touch .t-btn { pointer-events: auto; width: 48px; height: 48px; border-radius: 50%; font: 700 13px/1 var(--display, sans-serif);
+  color: #fff; background: rgba(20,22,30,.72); border: 2px solid rgba(255,255,255,.3); touch-action: none; }
+#touch .t-btn.on { background: rgba(255,210,74,.85); color: #111; }
+#touch .t-pause { position: absolute; right: 16px; top: 16px; width: 40px; height: 40px; }
+#touch .tb-e, #touch .tb-g { font-size: 11px; }
+@media (max-width: 760px) { #touch .t-pad { width: 168px; grid-template-columns: repeat(3, 48px); } #touch .t-look { right: 190px; } }
+
+/* input-mode chooser */
+.inputpick { display: flex; gap: 18px; justify-content: center; margin-top: 10px; }
+.inputpick .pick { flex: 1; max-width: 220px; padding: 18px; border: 2px solid rgba(255,255,255,.2); border-radius: 12px;
+  background: rgba(255,255,255,.05); cursor: pointer; text-align: center; }
+.inputpick .pick:hover { border-color: var(--gold2, #ffd24a); }
+.inputpick .pick .big { font: 700 22px/1.2 var(--display, sans-serif); margin-bottom: 6px; }
