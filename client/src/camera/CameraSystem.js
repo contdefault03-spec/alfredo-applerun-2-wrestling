@@ -210,6 +210,21 @@ export class CameraSystem {
       if (c.t > c.dur - 0.05) this.baseFov = 55;
       return true;
     }
+    if (c.kind === 'moment') {
+      // quick dramatic orbiting push-in on a major moment (KO, finish)
+      const ang = (c.ang || 0) + c.t * 1.3;
+      const d = 5.6 - Math.min(2.6, c.t * 2.2);
+      const y = (subj.y || ARENA.ring.height) + 1.6;
+      const pos = new THREE.Vector3(subj.x + Math.sin(ang) * d, y, subj.z + Math.cos(ang) * d);
+      const look = new THREE.Vector3(subj.x, (subj.y || ARENA.ring.height) + 0.8, subj.z);
+      this.clampPosition(pos);
+      this.pos.lerp(pos, Math.min(1, dt * 6));
+      this.focus.lerp(look, Math.min(1, dt * 8));
+      this.baseFov = 46;
+      this.apply(dt, this.focus);
+      if (c.t > c.dur - 0.05) this.baseFov = 55;
+      return true;
+    }
     return false;
   }
 

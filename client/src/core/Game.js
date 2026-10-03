@@ -517,6 +517,13 @@ export class Game {
     this.referee.update(dt, view.referee);
     this.arena.updateRopes(dt, view.fighters);
     this.arena.updateRingDamage(view.ring);
+    // broadcast cameras track the action
+    {
+      const live = view.fighters.filter((f) => f && !f.hidden && !f.eliminated);
+      let cx = 0, cz = 0, cy = ARENA.ring.height + 0.6;
+      if (live.length) { for (const f of live) { cx += f.x; cz += f.z; } cx /= live.length; cz /= live.length; }
+      this.arena.aimBroadcast(dt, cx, cz, cy);
+    }
     this.arena.setCageDoor(view.cageDoor);
     this.setRingGirls(['entrances', 'finished', 'over'].includes(view.match.phase));
     if (this._winnerMedia && ['finished', 'over'].includes(view.match.phase)) this.entranceDir?.drawWinner();
@@ -764,7 +771,8 @@ export class Game {
         case 'kickout': ui.banner('KICK OUT!', `${name(e.fighter)} survives at ${e.count}`, 1200); C.react('big'); A.crowdPop(1.2); break;
         case 'pin_broken': A.crowdBoo(0.35); break;
         case 'pinfall': ui.pinCount(3); ui.banner('PINFALL!', `${name(e.fighter)} pins ${name(e.victim)}`, 2400); A.crowdPop(1.4); break;
-        case 'ko': ui.banner('K.O.!', name(e.fighter), 2000); C.react('big'); A.crowdPop(1.2); cam.shake(0.5); this.spawnGore(byId.get(e.fighter)); break;
+        case 'ko': ui.banner('K.O.!', name(e.fighter), 2000); C.react('big'); A.crowdPop(1.2); cam.shake(0.5); this.spawnGore(byId.get(e.fighter));
+          cam.cinematic({ kind: 'moment', dur: 1.8, subject: () => this.byId?.get(e.fighter) }); break;
         case 'elimination': ui.feed(`${name(e.fighter)} has been ELIMINATED`); break;
         case 'bell': A.play('ring_bell', new THREE.Vector3(2.6, 1, -6.3), { times: e.ending ? 3 : 2, volume: 1.2 }); break;
         case 'match_start': {
