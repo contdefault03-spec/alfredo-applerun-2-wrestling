@@ -30,6 +30,14 @@ export const GAME_MODES = {
     winBy: ['pin', 'ko'], pinsInRingOnly: false, timeLimit: 360,
     items: 'lots', itemRespawn: 12, cage: false, tag: false,
   },
+  championship: {
+    id: 'championship', name: 'Championship Match', short: 'TITLE',
+    description: 'The biggest match in the game. Full stadium presentation, face-off, and the winner is crowned with the championship belt.',
+    minFighters: 2, maxFighters: 4, teams: 'free',
+    winBy: ['pin', 'ko'], pinsInRingOnly: true, timeLimit: 420,
+    items: 'ringside', itemRespawn: 0, cage: false, tag: false,
+    championship: true, belt: 'belt1', faceOff: true, grandIntro: true,
+  },
   cell: {
     id: 'cell', name: 'Hell in a Cell', short: 'CELL',
     description: 'A steel cell surrounds the ring. Climb the walls, ram rivals into the steel. Falls count anywhere.',

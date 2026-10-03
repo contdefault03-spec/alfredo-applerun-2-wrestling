@@ -113,7 +113,7 @@ export class CombatSystem {
 
     // ── damage ──
     const wasHp = v.hp;
-    let dmg = spec.damage * a.c.attackPower * (1 - v.c.defense);
+    let dmg = spec.damage * a.c.attackPower * (1 - v.c.defense) * (1 - (a.injArm || 0) * 0.3); // a worn-out arm hits softer
     if (v.state === S.CAGE_CLIMB || v.state === S.PERCH) dmg *= 1.1;
     dmg = Math.max(1, Math.round(dmg));
     v.hp = Math.max(0, v.hp - dmg);
@@ -122,6 +122,18 @@ export class CombatSystem {
     a.meter = Math.min(100, a.meter + dmg * (spec.special ? 0.02 : 0.09));
     v.meter = Math.min(100, v.meter + dmg * 0.05);
     v.staminaDelay = 0.3;
+    // ── accumulating injury + blood: heavy punishment wears a limb down and draws blood ──
+    {
+      const frac = dmg / Math.max(1, v.maxHp);
+      const heavy = dmg >= 90 || spec.special || spec.heavy;
+      if (heavy) {
+        // what put them down hurts the legs; heavy strikes wear the arms out
+        const legHit = spec.reaction === 'knockdown' || spec.reaction === 'launch' || spec.sound === 'slam';
+        if (legHit) v.injLeg = Math.min(1, v.injLeg + frac * 1.5);
+        else v.injArm = Math.min(1, v.injArm + frac * 1.5);
+      }
+      v.bloodLvl = Math.min(1, v.bloodLvl + frac * (heavy ? 1.8 : 0.5));
+    }
 
     // release any grapple the victim was involved in
     w.grapple.breakFor(v);

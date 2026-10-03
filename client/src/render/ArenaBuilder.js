@@ -79,6 +79,19 @@ export class ArenaView {
     // launch platform + support tower at the back
     add(this.group, new THREE.BoxGeometry(2.4, 0.2, 1.6), metal, { pos: [0, topY, startZ] });
     for (const sx of [-1, 1]) add(this.group, new THREE.CylinderGeometry(0.1, 0.12, topY, 10), metal, { pos: [sx * 1.0, topY / 2, startZ] });
+    // a real staircase up to the platform (this is how you physically get up there)
+    const steps = 10, rise = topY / steps, run = 0.34;
+    for (let i = 0; i < steps; i++) {
+      add(this.group, new THREE.BoxGeometry(1.5, rise * 0.9, run), metal,
+        { cast: false, pos: [0, rise * (i + 0.5), startZ - 1.0 - i * run] });
+    }
+    // handrails either side of the flight
+    for (const sx of [-1, 1]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, steps * run * 1.45), metal);
+      rail.position.set(sx * 0.78, topY * 0.62, startZ - 1.0 - (steps * run) / 2);
+      rail.rotation.x = -Math.atan2(topY, steps * run);
+      this.group.add(rail);
+    }
     // the cable itself, sloping down from the platform to above the ring centre
     const a = new THREE.Vector3(0, topY + 0.2, startZ), bpt = new THREE.Vector3(0, topY - 0.4, 0.3);
     const len = a.distanceTo(bpt);

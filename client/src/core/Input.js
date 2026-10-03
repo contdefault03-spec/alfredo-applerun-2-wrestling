@@ -22,6 +22,8 @@ export class Input {
     this.keys = new Set();
     this.held = 0; this.pressed = 0;
     this.mouseDX = 0; this.mouseDY = 0;
+    // virtual (touch) input: TouchControls writes into this; merged in sample()
+    this.virtual = { fx: 0, fz: 0, held: 0, pressed: 0, lookDX: 0, lookDY: 0 };
     this.enabled = false;
     this.padPrev = 0;
     this.listeners = {};
@@ -63,6 +65,10 @@ export class Input {
     if (this.keys.has('KeyD')) fx += 1; if (this.keys.has('KeyA')) fx -= 1;
     let camTurn = 0;
     if (this.keys.has('ArrowLeft')) camTurn -= 1; if (this.keys.has('ArrowRight')) camTurn += 1;
+    // touch / on-screen controls (mobile) feed the exact same struct as the keyboard
+    const vt = this.virtual;
+    fx += vt.fx; fz += vt.fz; held |= vt.held;
+    const vPressed = vt.pressed; vt.pressed = 0;
     // gamepad
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     let padBits = 0, rx = 0, ry = 0;
@@ -78,7 +84,7 @@ export class Input {
     }
     const padPressed = padBits & ~this.padPrev; this.padPrev = padBits;
     held |= padBits & 0x7ff;
-    const pressed = this.pressed | (padPressed & 0x7ff);
+    const pressed = this.pressed | (padPressed & 0x7ff) | vPressed;
     this.pressed = 0;
     // camera-relative → world
     const m = Math.min(1, Math.hypot(fx, fz));
@@ -90,7 +96,8 @@ export class Input {
       // camera forward = (s, c); right = (-c, s)… (three.js: +x left of forward when yaw measured like fighters)
       mx = s * sz - c * sx; mz = c * sz + s * sx;
     }
-    const look = { dx: this.mouseDX + rx * 14 + camTurn * 10, dy: this.mouseDY + ry * 10 };
+    const look = { dx: this.mouseDX + rx * 14 + camTurn * 10 + vt.lookDX, dy: this.mouseDY + ry * 10 + vt.lookDY };
+    vt.lookDX = 0; vt.lookDY = 0;
     this.mouseDX = this.mouseDY = 0;
     if (!this.enabled) return { mx: 0, mz: 0, held: 0, pressed: 0, look };
     return { mx, mz, held, pressed, look };

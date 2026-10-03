@@ -59,18 +59,39 @@ export class UIManager {
   showMenu(h) {
     const s = this.settings.get();
     const c = CHARACTERS[s.lastChar] || CHARACTERS.masked;
-    const e = this.mount('menu', `<div id="menu" class="screen"><div class="left">
-      <div class="logo">ALFREDO<br>APPLERUN 2<small>WRESTLING</small></div>
-      <div class="row name-row"><span class="dim">WRESTLER NAME</span><input class="field" id="pname" maxlength="16" placeholder="Guest" value="${esc(s.name)}" /></div>
-      <button class="btn primary" data-a="play">PLAY</button>
-      <button class="btn" data-a="multiplayer">MULTIPLAYER</button>
-      <button class="btn" data-a="friend">PLAY WITH FRIEND</button>
-      <button class="btn" data-a="vsai">VS AI</button>
-      <button class="btn" data-a="modes">GAME MODES</button>
-      <button class="btn" data-a="chars">CHARACTER SELECT</button>
-      <button class="btn" data-a="settings">SETTINGS</button>
+    const A = 'assets/art/';
+    const feat = { a: 'play', label: 'PLAY', sub: `AS ${esc(c.name).toUpperCase()}`, img: `${A}7.jpg` };
+    const tiles = [
+      { a: 'vsai', label: 'VS AI', img: `${A}8.jpg` },
+      { a: 'multiplayer', label: 'MULTIPLAYER', img: `${A}9.jpg` },
+      { a: 'friend', label: 'PLAY WITH FRIEND', img: `${A}10.jpg` },
+      { a: 'tournament', label: 'TOURNAMENT', img: `${A}11.jpg` },
+      { a: 'championship', label: 'CHAMPIONSHIP', img: `${A}12.jpg` },
+      { a: 'watch', label: 'WATCH (BROADCAST)', img: `${A}13.jpg` },
+    ];
+    const mini = [
+      { a: 'modes', label: 'GAME MODES' },
+      { a: 'chars', label: 'CHARACTER SELECT' },
+      { a: 'settings', label: 'SETTINGS' },
+    ];
+    const tileHTML = (t, cls = '') => `<button class="mtile ${cls}" data-a="${t.a}" style="background-image:url('${t.img}')">
+      <span class="scrim"></span><span class="lbl">${t.label}${t.sub ? `<small>${t.sub}</small>` : ''}</span></button>`;
+    const e = this.mount('menu', `<div id="menu" class="screen">
+      <div class="hero" style="background-image:url('${A}5.webp')"></div>
+      <div class="veil"></div>
+      <header class="mhead">
+        <div class="gametitle">ALFREDO APPLERUN&nbsp;2<small>WRESTLING</small></div>
+      </header>
+      <div class="mbody">
+        <div class="homebar"><span class="dot"></span><span class="homeword">HOME</span>
+          <label class="nametag">WRESTLER <input class="field" id="pname" maxlength="16" placeholder="Guest" value="${esc(s.name)}" /></label>
+        </div>
+        <div class="tilewrap">
+          ${tileHTML(feat, 'feat')}
+          <div class="tilegrid">${tiles.map((t) => tileHTML(t)).join('')}</div>
+        </div>
+        <div class="minirow">${mini.map((m) => `<button class="mbtn" data-a="${m.a}">${m.label}</button>`).join('')}</div>
       </div>
-      <div class="spot"><div class="dim">SELECTED WRESTLER</div><div class="nm">${esc(c.name)}</div><div class="dim">${esc(c.tagline)}</div></div>
       <div class="foot dim">WASD move · J punch · K kick · E grab · F interact · X special · H controls</div></div>`);
     e.querySelector('#pname').addEventListener('change', (ev) => this.settings.set({ name: ev.target.value.trim().slice(0, 16) }));
     e.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => { this.settings.set({ name: e.querySelector('#pname').value.trim().slice(0, 16) }); h[b.dataset.a]?.(); }));
@@ -108,6 +129,19 @@ export class UIManager {
     render();
   }
 
+  /** First-run input chooser: PC keyboard/mouse or on-screen mobile controls. */
+  showInputPicker({ suggest = 'pc', onPick }) {
+    const e = this.mount('inputpick', `<div class="screen overlay"><div class="center-panel panel">
+      <h2>HOW ARE YOU PLAYING?</h2>
+      <div class="dim" style="text-align:center">Same game, same servers — only the controls change. You can switch later in Settings.</div>
+      <div class="inputpick">
+        <div class="pick" data-m="pc"><div class="big">PC</div><div class="dim">Keyboard &amp; mouse<br>WASD · J/K · E · F · X</div></div>
+        <div class="pick" data-m="mobile"><div class="big">MOBILE</div><div class="dim">On-screen stick<br>&amp; touch buttons</div></div>
+      </div></div></div>`);
+    const hi = e.querySelector(`[data-m="${suggest}"]`); if (hi) hi.style.borderColor = 'var(--gold2,#ffd24a)';
+    e.querySelectorAll('.pick').forEach((n) => n.addEventListener('click', () => { this.unmount('inputpick'); onPick?.(n.dataset.m); }));
+  }
+
   // ── game modes list ──
   showModes({ onPick, onBack }) {
     const e = this.mount('modes', `<div class="screen overlay"><div class="center-panel panel"><button class="btn small close-x" data-a="back">BACK</button>
@@ -115,6 +149,30 @@ export class UIManager {
       <div class="dim" style="font-size:13px;margin-top:4px">${m.minFighters}–${m.maxFighters} wrestlers · ${Math.round(m.timeLimit / 60)} min · win by ${m.winBy.join(' / ')}${m.tag ? ' · tag rules' : ''}${m.cage ? ' · steel cell' : ''}</div></div>`; }).join('')}</div></div></div>`);
     e.querySelectorAll('.mode').forEach((m) => m.addEventListener('click', () => onPick(m.dataset.id)));
     e.querySelector('[data-a=back]').onclick = onBack;
+  }
+
+  /** Tournament bracket: shows the 3 rounds, who you face and in what match type. */
+  showBracket({ t, onGo, onBack }) {
+    const rows = t.bracket.map((r, i) => {
+      const n = i + 1;
+      const state = n < t.round ? 'won' : n === t.round ? 'now' : 'next';
+      const tag = state === 'won' ? '✔ WON' : state === 'now' ? '▶ NOW' : 'UPCOMING';
+      const opp = CHARACTERS[r.opp]?.name || r.opp;
+      const mode = GAME_MODES[r.mode]?.name || r.mode;
+      return `<div class="mode" style="opacity:${state === 'next' ? 0.55 : 1};border-color:${state === 'now' ? '#ffd24a' : ''}">
+        <div class="t">${r.name} — ${esc(mode)}</div>
+        <div class="d">${esc(CHARACTERS[t.charId]?.name || t.charId)} vs ${esc(opp)}</div>
+        <div class="dim" style="font-size:13px;margin-top:4px">${tag}</div></div>`;
+    }).join('');
+    const done = t.round > t.bracket.length;
+    const e = this.mount('bracket', `<div class="screen overlay"><div class="center-panel panel">
+      <h2>TOURNAMENT ${done ? '— CHAMPION!' : '· ROUND ' + t.round + ' OF ' + t.bracket.length}</h2>
+      <div class="col">${rows}</div>
+      <div class="row" style="justify-content:flex-end;margin-top:16px">
+        ${onBack ? '<button class="btn small" data-a="back">QUIT</button>' : ''}
+        <button class="btn primary" data-a="go">${done ? 'CELEBRATE' : 'FIGHT'}</button></div></div></div>`);
+    e.querySelector('[data-a=go]').onclick = () => { this.unmount('bracket'); onGo?.(); };
+    const b = e.querySelector('[data-a=back]'); if (b) b.onclick = () => { this.unmount('bracket'); onBack?.(); };
   }
 
   // ── exhibition (vs AI) setup ──
@@ -257,12 +315,14 @@ export class UIManager {
       <span>Mouse sensitivity</span><input type="range" min="0.2" max="3" step="0.1" data-k="mouseSens" value="${s.mouseSens}" />
       <span>Invert camera Y</span><select class="field" data-k="invertY"><option value="false">No</option><option value="true">Yes</option></select>
       <span>Show controls in match</span><select class="field" data-k="showControls"><option value="true">Yes</option><option value="false">No</option></select>
+      <span>Controls</span><select class="field" data-k="inputMode"><option value="pc">PC (keyboard &amp; mouse)</option><option value="mobile">Mobile (on-screen)</option></select>
       </div></div></div>`);
     e.querySelector('[data-k=voice]').value = s.voice;
     e.querySelector('[data-k=aiCommentary]').value = String(s.aiCommentary);
     e.querySelector('[data-k=cameraMode]').value = s.cameraMode;
     e.querySelector('[data-k=invertY]').value = String(s.invertY);
     e.querySelector('[data-k=showControls]').value = String(s.showControls);
+    e.querySelector('[data-k=inputMode]').value = s.inputMode || 'pc';
     e.querySelectorAll('[data-k]').forEach((inp) => inp.addEventListener('input', () => {
       let v = inp.value; if (inp.type === 'range') v = +v; if (v === 'true') v = true; if (v === 'false') v = false;
       this.settings.set({ [inp.dataset.k]: v }); onChange?.(inp.dataset.k, v);

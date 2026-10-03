@@ -19,9 +19,11 @@ import { FighterView } from '../render/FighterView.js';
 import { ItemViews } from '../render/ItemViews.js';
 import { Effects, Confetti } from '../render/Effects.js';
 import { Referee, Commentator, Announcer, RingGirl } from '../render/NPCs.js';
+import { makeBeltMesh } from '../render/Belt.js';
 import { ScreenDirector } from '../render/ScreenDirector.js';
 import { EntranceDirector } from '../render/EntranceDirector.js';
 import { CameraSystem } from '../camera/CameraSystem.js';
+import { TouchControls } from './TouchControls.js';
 import { AudioSystem } from '../audio/AudioSystem.js';
 import { CommentarySystem } from '../commentary/CommentarySystem.js';
 import { UIManager, TEAM_COLORS } from '../ui/UIManager.js';
@@ -42,6 +44,7 @@ export class Game {
     this.input = new Input(canvas);
     this.audio = new AudioSystem(this.settings);
     this.camera = new CameraSystem(this.renderer.camera, this.settings);
+    this.touch = new TouchControls(this.input);
     this.net = new NetClient();
     this.session = null;
     this.views = new Map();
@@ -60,7 +63,17 @@ export class Game {
       this.audio.applyVolumes();
     });
     this.input.on('pause', () => this.togglePause());
-    this.input.on('camera', () => { if (this.state === 'match') this.ui.feed('Camera: ' + (this.camera.toggleMode() === 'auto' ? 'Broadcast' : 'Free')); });
+    this.input.on('camera', () => {
+      if (this.state !== 'match') return;
+      if (this.spectator) {   // spectating: V cycles the broadcast cameras
+        const views = CameraSystem.SPECTATOR_VIEWS;
+        this.spectator.i = (this.spectator.i + 1) % views.length;
+        this.spectator.view = views[this.spectator.i];
+        this.ui.feed('Camera: ' + this.spectator.view.toUpperCase() + (this.spectator.view === 'free' ? ' — WASD move, Shift fast, Space/C up-down' : ''));
+        return;
+      }
+      this.ui.feed('Camera: ' + (this.camera.toggleMode() === 'auto' ? 'Broadcast' : 'Free'));
+    });
     this.input.on('help', () => this.ui.toggleHelp());
     this.input.on('confirm', () => { if (this.state === 'match' && this.session && ['finished', 'over'].includes(this.session.view().match.phase)) this.showResults(this.endInfo || { winners: this.session.view().match.winners, method: this.session.view().match.method }); });
     this.wireNet();
@@ -101,6 +114,8 @@ export class Game {
     await Promise.all([
       this.assets.loadProp('ref', 'assets/characters/ref.glb').then((s) => this.skinNPC(this.referee, s)).catch((e) => console.warn('ref.glb', e)),
       this.assets.loadProp('ann', 'assets/characters/ann.glb').then((s) => this.skinNPC(this.announcer, s)).catch((e) => console.warn('ann.glb', e)),
+      this.assets.loadProp('belt', 'assets/characters/belt.glb').catch((e) => console.warn('belt.glb', e)),
+      this.assets.loadProp('belt1', 'assets/characters/belt1.glb').catch((e) => console.warn('belt1.glb', e)),
     ]);
     this.ui.loading(0.95, 'Warming up…');
     this.ui.portraits = makePortraits(this.renderer.renderer, this.assets);
@@ -111,7 +126,12 @@ export class Game {
       const opps = (qs.get('opp') || 'lucky').split(','), teams = (qs.get('teams') || '').split(',').filter(Boolean).map(Number);
       this.startLocalMatch(qs.get('mode') || 'normal', opps.map((c, i) => ({ charId: c, team: teams[i] ?? i + 1, difficulty: qs.get('diff') || 'normal' })), qs.get('char') || undefined);
     }
-    else this.showMainMenu();
+    else if (!this.settings.get().inputMode) {
+      this.ui.showInputPicker({
+        suggest: TouchControls.likelyMobile() ? 'mobile' : 'pc',
+        onPick: (mode) => { this.settings.set({ inputMode: mode }); this.applyInputMode(); this.showMainMenu(); },
+      });
+    } else { this.applyInputMode(); this.showMainMenu(); }
   }
 
   // ── menus ─────────────────────────────────────────────
@@ -127,9 +147,17 @@ export class Game {
     this.showcaseState = { x: 0, y: ARENA.ring.height, z: 0.4, yaw: 0.35, state: S.IDLE, stateTime: 0, vx: 0, vz: 0 };
   }
 
+  /** Show/hide the on-screen controls for the chosen input mode (PC is unchanged). */
+  applyInputMode() {
+    const mobile = this.settings.get().inputMode === 'mobile';
+    this.touch?.show(mobile && this.state === 'match');
+    return mobile;
+  }
+
   showMainMenu() {
     this.endMatchCleanup();
     this.state = 'menu';
+    this.touch?.show(false);
     this.ui.clearMenus();
     this.setShowcase(this.settings.get().lastChar);
     this.audio.startMusic();
@@ -137,11 +165,49 @@ export class Game {
       play: () => this.quickPlay(),
       multiplayer: () => this.onlineQuick(),
       friend: () => this.friendMenu(),
+      watch: () => this.startWatchShow(),
+      tournament: () => this.startTournament(),
+      championship: () => this.setupMenu('championship'),
       vsai: () => this.setupMenu('normal'),
       modes: () => this.ui.showModes({ onPick: (m) => { this.ui.unmount('modes'); this.setupMenu(m); }, onBack: () => this.ui.unmount('modes') }),
       chars: () => this.charSelect(() => this.showMainMenu()),
-      settings: () => this.ui.showSettings({ onBack: () => this.ui.unmount('settings') }),
+      settings: () => this.ui.showSettings({ onBack: () => this.ui.unmount('settings'), onChange: (k) => { if (k === 'inputMode') this.applyInputMode(); } }),
     });
+  }
+
+  /** Watch-AI broadcast: pick a random card and just watch it, cinematic cameras on. */
+  startWatchShow() {
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    const mode = pick(['normal', 'items', 'cell', 'championship']);
+    const roster = [...CHARACTER_IDS];
+    const a = pick(roster), rest = roster.filter((c) => c !== a);
+    const bList = [{ charId: pick(rest), team: 1, difficulty: this.settings.get().difficulty || 'hard' }];
+    this.ui.clearMenus();
+    this.startLocalMatch(mode, bList, a, { watch: true });
+  }
+
+  // ── Tournament: three rounds, random opponents + match types, belt for the winner ──
+  startTournament() {
+    const me = this.settings.get().lastChar || 'masked';
+    const others = CHARACTER_IDS.filter((c) => c !== me);
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    const pool = [...others];
+    const modes = ['normal', 'items', 'cell'];
+    const names = ['QUARTER-FINAL', 'SEMI-FINAL', 'FINAL'];
+    const bracket = names.map((name, i) => {
+      const opp = pool.length ? pool.splice(Math.floor(Math.random() * pool.length), 1)[0] : pick(others);
+      return { opp, mode: i === 2 ? 'championship' : pick(modes), name };
+    });
+    this.tournament = { round: 1, rounds: 3, charId: me, bracket };
+    this.ui.clearMenus();
+    this.ui.showBracket({ t: this.tournament, onGo: () => this.startTournamentRound(), onBack: () => { this.tournament = null; this.showMainMenu(); } });
+  }
+
+  startTournamentRound() {
+    const t = this.tournament;
+    if (!t) return;
+    const r = t.bracket[t.round - 1];
+    this.startLocalMatch(r.mode, [{ charId: r.opp, team: 1, difficulty: this.settings.get().difficulty }], t.charId);
   }
 
   charSelect(back, { taken = {}, onPick = null } = {}) {
@@ -175,10 +241,11 @@ export class Game {
   }
 
   // ── local match ───────────────────────────────────────
-  startLocalMatch(mode, slots, charOverride) {
+  startLocalMatch(mode, slots, charOverride, { watch = false } = {}) {
     const s = this.settings.get();
     const me = charOverride || s.lastChar;
-    const fighters = [{ charId: me, team: 0, name: s.name || getCharacter(me).name, isAI: false }, ...slots.map((sl) => ({ charId: sl.charId, team: sl.team, isAI: true, difficulty: sl.difficulty }))];
+    this.aiOnly = !!watch;   // broadcast / watch-AI show: nobody is player-controlled
+    const fighters = [{ charId: me, team: 0, name: s.name || getCharacter(me).name, isAI: !!watch, difficulty: watch ? (s.difficulty || 'normal') : undefined }, ...slots.map((sl) => ({ charId: sl.charId, team: sl.team, isAI: true, difficulty: sl.difficulty }))];
     this.lastLocal = { mode, slots, charOverride };
     const session = new LocalSession({ mode, fighters, entrances: true }, 1);
     this.beginMatch(session);
@@ -194,6 +261,7 @@ export class Game {
     this.audio.stopMusic();
     this.session = session;
     this.state = 'match';
+    this.applyInputMode();   // mobile: raise the on-screen controls for the match
     this.paused = false;
     this.arena.setMode(session.rules);
     this.camera.cage = !!session.rules.cage;
@@ -226,7 +294,9 @@ export class Game {
   endMatchCleanup() {
     this.entranceDir?.stop();
     this._winnerMedia = false; this.entranceDir?.stopWinner();
+    this.aiOnly = false; this.spectator = null;
     this.clearGore();
+    this.clearBelt();
     this.restoreReferee();
     this.setRingGirls(false);
     this.arena?.resetRingDamage?.();
@@ -274,6 +344,17 @@ export class Game {
     const me = view.fighters.find((f) => f.id === view.localId);
     const winners = view.fighters.filter((f) => (info.winners || []).includes(f.id));
     const stats = info.stats || view.fighters.map((f) => ({ id: f.id, name: f.name, charId: f.charId, team: f.team, damage: f.stats?.damage ?? 0, hits: f.stats?.hits ?? 0, specials: f.stats?.specials ?? 0, hp: f.hp }));
+    // tournament: a win advances the bracket, a loss knocks you out
+    const t = this.tournament;
+    if (t && !this.session.online) {
+      const won = !!me && winners.some((w) => w.team === me.team);
+      if (won && t.round < t.rounds) {
+        t.round++;
+        this.ui.showBracket({ t, onGo: () => this.startTournamentRound(), onBack: () => { this.tournament = null; this.showMainMenu(); } });
+        return;
+      }
+      if (!won) this.tournament = null;   // knocked out of the tournament
+    }
     this.ui.showResults({ modeName: this.session.rules.name, method: info.method, winners, youWon: !!me && winners.some((w) => w.team === me.team), stats }, {
       rematch: this.session.online ? null : () => { const l = this.lastLocal; this.startLocalMatch(l.mode, l.slots, l.charOverride); },
       lobby: this.session.online ? () => { this.net.send({ t: 'backToLobby' }); this.backToLobby(); } : null,
@@ -408,6 +489,7 @@ export class Game {
       this.announcer.update(dt);
       this.commentators.forEach((c) => c.update(dt));
       this.updateRingGirls(dt);
+      this.updateBelt(dt);
       this.screens.update(dt, this.time, this.session?.view?.());
       const cam = this.renderer.camera;
       this.audio.setListener(cam.position, cam.getWorldDirection(new THREE.Vector3()));
@@ -465,6 +547,8 @@ export class Game {
       const idx = Math.min(order.length - 1, Math.floor(t / (4.2 / Math.max(1, order.length))));
       const f = order[idx];
       if (f) this.camera.update(dt, { menu: { kind: 'showcase', subject: { x: f.x, y: f.y, z: f.z, height: f.c.height }, angle: f.yaw + 0.35 } });
+    } else if (this.updateSpectator(dt, view, byId, me, look, pressed)) {
+      // spectator / broadcast cameras own the view this frame
     } else if (me && (me.state === S.RAFTER || me.state === S.RAFTER_CLIMB || me.state === S.RAFTER_DROP)) {
       // up on the zipline / overhead – pull the camera back and high so you can see the ring below and aim
       this.camera.update(dt, { menu: { kind: 'showcase', subject: { x: me.x, y: 3.2, z: me.z, height: 7 }, angle: 0.5 } });
@@ -482,6 +566,27 @@ export class Game {
     if (!this.session.online && view.match.phase === 'over' && !this.resultsShown) {
       this.showResults({ winners: view.match.winners, method: view.match.method });
     }
+  }
+
+  /**
+   * Broadcast / spectator cameras. Returns true when it has taken over the view:
+   * when the local wrestler is KO'd or eliminated (you're out of the match), or in
+   * an AI-only show. Cycle cameras with V, free-fly with WASD + Shift (fast),
+   * Space/C for up/down.
+   */
+  updateSpectator(dt, view, byId, me, look, pressed) {
+    const out = this.aiOnly || !me || me.eliminated || me.state === S.KO;
+    if (!out) { if (this.spectator) { this.spectator = null; this.ui.setSpectator?.(null); } return false; }
+    if (!this.spectator) {
+      this.spectator = { view: this.aiOnly ? 'cinematic' : 'follow', i: 0 };
+      this.ui.feed(this.aiOnly ? 'Broadcast mode — V to change camera' : 'You are out of the match — spectating (V to change camera)');
+    }
+    const inp = this.input.sample(0);
+    const held = inp.held;
+    const move = { x: inp.mx, z: inp.mz, y: (held & BTN.JUMP ? 1 : 0) - (held & BTN.DODGE ? 1 : 0), fast: !!(held & BTN.RUN) };
+    this.camera.spectate(dt, { fighters: view.fighters, view: this.spectator.view, look, move });
+    this.ui.setSpectator?.(this.spectator.view);
+    return true;
   }
 
   // ── context prompts for the local wrestler ──
@@ -569,7 +674,12 @@ export class Game {
           if (e.heavy) { cam.punch(e.special ? 6 : 2.5); this.renderer.impactFlash(e.special ? 0.35 : 0.12); }
           C.react('pop', e.crowd ?? 0.1); A.crowdPop((e.crowd ?? 0.1) * 0.8);
           if (p && (involved(e) || e.heavy)) this.damageNumber(p, e.damage);
-          if (p && e.damage >= 70 && this.settings.get().gore !== false) this.bloodHit(p, Math.min(1.5, e.damage / 90)); // hurt badly → blood
+          // blood ACCUMULATES: the more beaten up they already are, the more they bleed
+          if (p && this.settings.get().gore !== false) {
+            const vic = byId.get(e.victim);
+            const lvl = vic?.bloodLvl || 0;
+            if (e.damage >= 70 || lvl > 0.35) this.bloodHit(p, Math.min(2.2, e.damage / 90 + lvl * 1.2));
+          }
           break;
         }
         case 'block': A.play('block', p); E.burst(p, { n: 6, speed: 2, color: [0.6, 0.8, 1], size: 0.06, life: 0.2 }); break;
@@ -868,6 +978,76 @@ export class Game {
     this.bloodDecals = [];
   }
 
+  /**
+   * Championship belt ceremony: the ring announcer carries it over and hands it to
+   * the champion, who raises it to the crowd, then wears it around the waist (it
+   * stays on the model for the rest of the celebration).
+   */
+  awardBelt(champ, kind = 'belt') {
+    if (!champ || this._belt) return;
+    const src = this.assets.props?.[kind];
+    const view = this.views.get(champ.id);
+    if (!src || !view) return;
+    const mesh = makeBeltMesh(src, { curl: kind === 'belt1' });
+    if (!mesh) return;
+    this.scene.add(mesh);
+    this._belt = { mesh, view, phase: 'handover', t: 0, kind };
+    // announcer brings it to the champ
+    const ax = Math.max(-2.2, Math.min(2.2, champ.x + 1.1));
+    const az = Math.max(-2.2, Math.min(2.2, champ.z - 0.4));
+    this.announcer.goTo(ax, ARENA.ring.height, az, Math.atan2(champ.x - ax, champ.z - az));
+    this.announcer.speak(4.5);
+  }
+
+  updateBelt(dt) {
+    const b = this._belt;
+    if (!b || b.phase === 'worn') return;
+    b.t += dt;
+    const view = b.view, inst = view?.inst;
+    if (!inst) return;
+    const hand = new THREE.Vector3(); view.handWorld('R', hand);
+    if (b.phase === 'handover') {
+      // travels from the announcer's hand across to the champion
+      const from = new THREE.Vector3();
+      const ab = this.announcer?.solver?.b?.hand_R;
+      if (ab) ab.getWorldPosition(from); else from.set(hand.x + 1.2, hand.y, hand.z);
+      const to = hand.clone(); to.y += 0.55;
+      const u = Math.min(1, b.t / 1.5);
+      b.mesh.position.lerpVectors(from, to, u * u * (3 - 2 * u));
+      b.mesh.rotation.y += dt * 1.1;
+      if (u >= 1) {
+        b.phase = 'raise'; b.t = 0;
+        this.ui.banner('CHAMPION!', '', 2200);
+        this.audio.crowdPop?.(1.6); this.crowd?.react?.('celebrate');
+        this.confetti?.start?.(6);
+      }
+    } else if (b.phase === 'raise') {
+      // held high over the head and turned so the plate faces the crowd
+      const head = new THREE.Vector3();
+      if (inst.bones.head) inst.bones.head.getWorldPosition(head); else head.copy(hand).setY(hand.y + 0.8);
+      head.y += 0.55 + Math.sin(b.t * 2.2) * 0.07;
+      b.mesh.position.copy(head);
+      b.mesh.rotation.set(0.25, (view.root?.rotation.y || 0) + Math.sin(b.t * 0.8) * 0.6, 0);
+      if (b.t > 3.2) {
+        // strap it on – parented to the hips so it rides the body from here on
+        b.mesh.removeFromParent();
+        b.mesh.position.set(0, 0.02, 0);
+        b.mesh.rotation.set(0, 0, 0);
+        b.mesh.scale.multiplyScalar(1 / view.scale);
+        inst.bones.hips.add(b.mesh);
+        b.phase = 'worn';
+        this.ui.feed('And the belt is around the waist of the NEW CHAMPION!');
+        this.audio.crowdPop?.(1.3);
+      }
+    }
+  }
+
+  clearBelt() {
+    if (!this._belt) return;
+    try { this._belt.mesh.removeFromParent(); this._belt.mesh.geometry?.dispose?.(); this._belt.mesh.material?.dispose?.(); } catch { /* ignore */ }
+    this._belt = null;
+  }
+
   /** Winner moment: confetti, pyro from the ring posts, announcer declares the winner. */
   celebrationFX(e, byId, view) {
     this.confetti.start(10);
@@ -892,6 +1072,10 @@ export class Game {
       this.announcer.goTo(ax, R.height, az, Math.atan2(-ax, 6 - az));
       this.commentary.announce(line); this.announcer.speak(4.5);
     }, 2200);
+    // title matches (and the tournament final) are crowned with a belt
+    const rules = this.session?.rules;
+    const beltKind = rules?.belt || (this.tournament && this.tournament.round >= this.tournament.rounds ? 'belt' : null);
+    if (beltKind && winners[0]) setTimeout(() => { if (this.state === 'match') this.awardBelt(winners[0], beltKind); }, 3800);
   }
 
   refPos(view) { return new THREE.Vector3(view.referee.x, view.referee.y, view.referee.z); }

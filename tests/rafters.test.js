@@ -21,7 +21,7 @@ test('interact at the back-stands zipline rides up over the ring', () => {
   f.input.pressed = BTN.INTERACT;
   w.step();
   assert.equal(f.state, S.RAFTER_CLIMB);
-  for (let i = 0; i < Math.ceil(1.6 / DT); i++) w.step();
+  for (let i = 0; i < Math.ceil(2.4 / DT); i++) w.step();
   assert.equal(f.state, S.RAFTER);
   assert.ok(Math.abs(f.y - RAFTER_Y) < 0.1, 'at rafter height');
 });
@@ -29,7 +29,7 @@ test('interact at the back-stands zipline rides up over the ring', () => {
 test('moving in the rafters is clamped over the ring', () => {
   const w = live(); const f = w.byId(1);
   w.controller.startRafterClimb(f);
-  for (let i = 0; i < Math.ceil(1.6 / DT); i++) w.step();
+  for (let i = 0; i < Math.ceil(2.4 / DT); i++) w.step();
   assert.equal(f.state, S.RAFTER);
   f.input.mx = 1; f.input.mz = 0;
   for (let i = 0; i < 300; i++) w.step();

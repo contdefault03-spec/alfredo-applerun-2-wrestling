@@ -2,7 +2,7 @@
 // buttons" through the same input struct players use, so every mechanic is
 // shared. States: idle, search, chase, attack, defend, dodge, grapple,
 // recover, getItem, flee, pin, climb, special, taunt (+ target switching).
-import { AI_DIFFICULTY } from '../config/ai.js';
+import { AI_DIFFICULTY, personalityOf } from '../config/ai.js';
 import { ATTACKS } from '../config/attacks.js';
 import { ARENA } from '../config/arena.js';
 import { BTN, S, ZONE, DOWN_STATES, FREE_STATES } from './constants.js';
@@ -19,7 +19,7 @@ export class AISystem {
       f.aiState = {
         mode: 'idle', t: 0, think: 0, target: null, retarget: 0, pending: [], strafe: rand() < 0.5 ? 1 : -1,
         strafeT: 0, mashT: 0, reactT: 0, lastSeenAttack: null, goal: null, cfg: AI_DIFFICULTY[f.difficulty] || AI_DIFFICULTY.normal,
-        tagWant: 0,
+        tagWant: 0, pers: personalityOf(f.charId), aggro: 1, regroupUntil: 0, itemUntil: 0,
       };
     }
     return f.aiState;
@@ -196,14 +196,27 @@ export class AISystem {
     }
     if (b.mode === 'defend') b.mode = 'chase';
 
-    // ── FLEE when badly hurt (grab an item, get out of the ring) ──
-    if (hpFrac(f) < cfg.fleeHealth && hpFrac(tgt) > hpFrac(f) + 0.25 && d < 3 && rand() < 0.02) { b.mode = 'flee'; b.fleeUntil = b.t + 1.5 + rand() * 1.5; }
-    if (b.mode === 'flee') {
-      if (b.t > b.fleeUntil) b.mode = 'chase';
+    // ── situational aggression: health, the opponent's health and personality ──
+    const myHp = hpFrac(f), oppHp = hpFrac(tgt);
+    b.aggro = Math.max(0.15, Math.min(1.8, cfg.aggression * b.pers.aggr
+      * (0.55 + myHp * 0.75)                 // hurt -> more careful
+      * (oppHp < 0.3 ? 1.45 : 1.0)));        // smell blood -> go finish it
+
+    // ── REGROUP: badly hurt and outgunned -> break off, keep away and heal up ──
+    const retreatAt = Math.max(0.12, cfg.fleeHealth * b.pers.flee * 1.9);
+    if (b.mode !== 'regroup' && myHp < retreatAt && oppHp > myHp + 0.12) {
+      b.mode = 'regroup'; b.regroupUntil = b.t + 3.5 + rand() * 3.5;
+    }
+    if (b.mode === 'regroup') {
+      const healed = myHp > Math.min(0.72, retreatAt + 0.3);
+      if (b.t > b.regroupUntil || healed || oppHp < myHp - 0.1) { b.mode = 'chase'; }
       else {
+        // put real distance between us; break line of sight by leaving the ring
         const ax = f.x - tgt.x, az = f.z - tgt.z, ad = Math.hypot(ax, az) || 1;
-        this.moveToward(f, f.x + ax / ad * 3, f.z + az / ad * 3, true);
-        if (f.zone === ZONE.RING && w.arena.ropeGap(f.x, f.z) < 0.7 && rand() < 0.3) this.press(f, BTN.INTERACT);
+        this.moveToward(f, f.x + ax / ad * 5, f.z + az / ad * 5, true);
+        if (d < 2.2 && rand() < cfg.dodgeChance) this.press(f, BTN.DODGE);
+        if (d < 3) this.hold(f, BTN.BLOCK);
+        if (f.zone === ZONE.RING && w.arena.ropeGap(f.x, f.z) < 0.7 && rand() < 0.25) this.press(f, BTN.INTERACT);
         return;
       }
     }
@@ -255,7 +268,7 @@ export class AISystem {
       // up close, smash with what we're holding; only throw occasionally at mid-range
       if (d < reach + 0.5) { this.press(f, rand() < 0.4 ? BTN.KICK : BTN.PUNCH); return; }
       if (d > 3 && d < 8 && b.t > (b.itemUntil || 0) && rand() < 0.05) { this.press(f, BTN.THROW); b.itemUntil = b.t + 2.5; return; }
-    } else if (b.mode === 'getItem' || (d > 3.5 && b.t > (b.itemUntil || 0) && rand() < cfg.itemChance * 0.06)) {
+    } else if (b.mode === 'getItem' || (d > 3.5 && b.t > (b.itemUntil || 0) && rand() < cfg.itemChance * b.pers.item * 0.06)) {
       // only fetch an item from range (never mid-brawl), and not again for a few seconds
       const it = this.nearestItem(f, 7);
       if (it && (d > 2.5 || b.mode === 'getItem')) {
@@ -272,15 +285,16 @@ export class AISystem {
     // ── CHASE / ATTACK ──
     b.mode = d < reach + 1.2 ? 'attack' : 'chase';
     if (!sameZone || d > reach + 0.3) {
-      if (sameZone && d > 4 && d < 9 && f.zone === ZONE.RING && rand() < cfg.aggression * 0.08) {
+      if (sameZone && d > 4 && d < 9 && f.zone === ZONE.RING && rand() < b.aggro * 0.08) {
         this.moveToward(f, tgt.x, tgt.z, true); // running attack setup
       } else this.navigate(f, tgt.x, tgt.z, tgt.zone, d > 3.5);
       // running strike when close at speed
-      if (sameZone && f.runTime > 0.4 && d < reach + 1.4 && rand() < cfg.aggression) this.press(f, rand() < 0.5 ? BTN.KICK : BTN.PUNCH);
+      if (sameZone && f.runTime > 0.4 && d < reach + 1.4 && rand() < b.aggro) this.press(f, rand() < 0.5 ? BTN.KICK : BTN.PUNCH);
       return;
     }
     this.approach(f, tgt, d, reach, b);
-    if (rand() > cfg.aggression * 0.9) return; // hesitation / spacing
+    // hesitation / spacing: cautious or hurt AIs hold the mid-range instead of piling in
+    if (rand() > b.aggro * 0.9) { if (d < reach + 1.6 && rand() < b.pers.space * 0.5) this.approach(f, tgt, d, reach + 1.2, b); return; }
     // choose an attack that can actually hit this target
     const small = tgt.c.height < f.c.height * 0.7;
     const r = rand();
