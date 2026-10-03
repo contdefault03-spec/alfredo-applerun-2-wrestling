@@ -39,16 +39,54 @@ input, select { font-family: var(--body); font-size: 16px; }
 .bar { width: min(520px, 80vw); height: 8px; background: #151a2a; margin-top: 30px; overflow: hidden; }
 .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--red), var(--gold)); transition: width .2s; }
 
-/* ── main menu ── */
-#menu { background: linear-gradient(90deg, rgba(5,6,10,.92) 0%, rgba(5,6,10,.55) 38%, rgba(5,6,10,0) 60%); }
-#menu .left { padding: 4vh 0 0 6vw; display: flex; flex-direction: column; gap: 8px; width: min(460px, 90vw); }
-#menu .logo { font-size: clamp(40px, min(6.5vw, 8.5vh), 92px); margin-bottom: 8px; }
-#menu .logo small { text-align: left; }
-#menu .btn { font-size: clamp(20px, 3.4vh, 30px); text-align: left; padding: 6px 26px; }
-#menu .name-row { margin: 4px 0 8px; }
-#menu .foot { position: absolute; bottom: 16px; left: 6vw; font-size: 14px; }
-#menu .spot { position: absolute; right: 5vw; bottom: 8vh; text-align: right; }
-#menu .spot .nm { font-family: var(--display); font-size: 64px; color: var(--gold); line-height: 1; }
+/* ── main menu (WWE-2K-style hero + tiles) ── */
+#menu { flex-direction: column; overflow: hidden; background: #05060a; }
+#menu .hero { position: absolute; inset: 0; background-size: cover; background-position: center 28%; }
+#menu .veil { position: absolute; inset: 0; background:
+  linear-gradient(180deg, rgba(5,6,10,.35) 0%, rgba(5,6,10,0) 22%, rgba(5,6,10,0) 42%, rgba(5,6,10,.78) 72%, rgba(5,6,10,.97) 100%); }
+#menu > * { position: relative; z-index: 1; }
+
+#menu .mhead { padding: 3.2vh 6vw 0; }
+#menu .gametitle { font-family: 'Rye', var(--display); color: var(--gold2); line-height: .92;
+  font-size: clamp(30px, 5.4vw, 72px); letter-spacing: 1px;
+  text-shadow: 0 2px 0 #4a2f05, 0 0 26px rgba(212,175,55,.5), 0 8px 26px rgba(0,0,0,.8); }
+#menu .gametitle small { display: block; font-family: var(--display); color: var(--text); letter-spacing: 14px;
+  font-size: clamp(16px, 2.3vw, 34px); margin-top: 4px; text-shadow: 0 3px 10px rgba(0,0,0,.8); }
+
+#menu .mbody { margin-top: auto; padding: 0 3vw 3.2vh; display: flex; flex-direction: column; gap: 10px; }
+#menu .homebar { display: flex; align-items: center; gap: 12px; padding: 0 1vw; }
+#menu .homebar .dot { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #9aa3bd); box-shadow: 0 0 12px rgba(255,255,255,.5); }
+#menu .homeword { font-family: var(--display); font-size: clamp(26px, 3vw, 40px); letter-spacing: 3px; border-bottom: 3px solid var(--red); padding-bottom: 2px; }
+#menu .nametag { margin-left: auto; color: var(--dim); font-family: var(--display); letter-spacing: 2px; display: flex; align-items: center; gap: 8px; font-size: 16px; }
+#menu .nametag .field { width: 150px; }
+
+#menu .tilewrap { display: grid; grid-template-columns: minmax(260px, 1.35fr) 3fr; gap: 12px; }
+#menu .tilegrid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 12px; }
+#menu .mtile { position: relative; border: 1px solid rgba(212,175,55,.25); background: #0d1120 center/cover no-repeat;
+  overflow: hidden; padding: 0; min-height: 11vh; transition: transform .12s, border-color .12s, box-shadow .12s; }
+#menu .tilewrap .feat { min-height: calc(22vh + 12px); }
+#menu .mtile .scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.05) 40%, rgba(0,0,0,.85) 100%); }
+#menu .mtile .lbl { position: absolute; left: 12px; bottom: 9px; font-family: var(--display); font-size: clamp(16px, 1.5vw, 22px);
+  letter-spacing: 1px; color: #fff; text-align: left; text-shadow: 0 2px 6px #000; z-index: 1; line-height: 1; }
+#menu .mtile .lbl small { display: block; font-size: .55em; color: var(--gold2); letter-spacing: 2px; margin-top: 3px; }
+#menu .feat .lbl { font-size: clamp(26px, 2.8vw, 42px); }
+#menu .mtile:hover, #menu .mtile:focus-visible { transform: translateY(-3px); border-color: var(--gold); box-shadow: 0 10px 28px rgba(0,0,0,.6), inset 0 0 0 2px var(--gold2); outline: none; }
+#menu .mtile.feat { border-color: rgba(200,16,46,.6); }
+#menu .mtile.feat:hover { border-color: var(--gold); }
+
+#menu .minirow { display: flex; gap: 10px; padding: 2px 1vw 0; flex-wrap: wrap; }
+#menu .mbtn { background: linear-gradient(180deg, rgba(28,34,54,.9), rgba(18,22,38,.9)); color: var(--text); border: 1px solid var(--line);
+  padding: 7px 18px; font-family: var(--display); font-size: 17px; letter-spacing: 1px;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); transition: background .12s, color .12s; }
+#menu .mbtn:hover, #menu .mbtn:focus-visible { background: linear-gradient(180deg, var(--gold2), var(--gold)); color: #120e02; outline: none; }
+#menu .foot { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 13px; z-index: 2; }
+
+@media (max-width: 720px) {
+  #menu .tilewrap { grid-template-columns: 1fr; }
+  #menu .tilegrid { grid-template-columns: repeat(3, 1fr); }
+  #menu .tilewrap .feat { min-height: 13vh; }
+  #menu .nametag { display: none; }
+}
 
 /* ── character select ── */
 #charselect { flex-direction: column; background: linear-gradient(180deg, rgba(5,6,10,.85) 0%, rgba(5,6,10,0) 25%, rgba(5,6,10,0) 60%, rgba(5,6,10,.92) 100%); }

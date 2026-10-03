@@ -59,21 +59,39 @@ export class UIManager {
   showMenu(h) {
     const s = this.settings.get();
     const c = CHARACTERS[s.lastChar] || CHARACTERS.masked;
-    const e = this.mount('menu', `<div id="menu" class="screen"><div class="left">
-      <div class="logo">ALFREDO<br>APPLERUN 2<small>WRESTLING</small></div>
-      <div class="row name-row"><span class="dim">WRESTLER NAME</span><input class="field" id="pname" maxlength="16" placeholder="Guest" value="${esc(s.name)}" /></div>
-      <button class="btn primary" data-a="play">PLAY</button>
-      <button class="btn" data-a="multiplayer">MULTIPLAYER</button>
-      <button class="btn" data-a="friend">PLAY WITH FRIEND</button>
-      <button class="btn" data-a="watch">WATCH AI (BROADCAST)</button>
-      <button class="btn" data-a="tournament">TOURNAMENT</button>
-      <button class="btn" data-a="championship">CHAMPIONSHIP</button>
-      <button class="btn" data-a="vsai">VS AI</button>
-      <button class="btn" data-a="modes">GAME MODES</button>
-      <button class="btn" data-a="chars">CHARACTER SELECT</button>
-      <button class="btn" data-a="settings">SETTINGS</button>
+    const A = 'assets/art/';
+    const feat = { a: 'play', label: 'PLAY', sub: `AS ${esc(c.name).toUpperCase()}`, img: `${A}7.jpg` };
+    const tiles = [
+      { a: 'vsai', label: 'VS AI', img: `${A}8.jpg` },
+      { a: 'multiplayer', label: 'MULTIPLAYER', img: `${A}9.jpg` },
+      { a: 'friend', label: 'PLAY WITH FRIEND', img: `${A}10.jpg` },
+      { a: 'tournament', label: 'TOURNAMENT', img: `${A}11.jpg` },
+      { a: 'championship', label: 'CHAMPIONSHIP', img: `${A}12.jpg` },
+      { a: 'watch', label: 'WATCH (BROADCAST)', img: `${A}13.jpg` },
+    ];
+    const mini = [
+      { a: 'modes', label: 'GAME MODES' },
+      { a: 'chars', label: 'CHARACTER SELECT' },
+      { a: 'settings', label: 'SETTINGS' },
+    ];
+    const tileHTML = (t, cls = '') => `<button class="mtile ${cls}" data-a="${t.a}" style="background-image:url('${t.img}')">
+      <span class="scrim"></span><span class="lbl">${t.label}${t.sub ? `<small>${t.sub}</small>` : ''}</span></button>`;
+    const e = this.mount('menu', `<div id="menu" class="screen">
+      <div class="hero" style="background-image:url('${A}5.webp')"></div>
+      <div class="veil"></div>
+      <header class="mhead">
+        <div class="gametitle">ALFREDO APPLERUN&nbsp;2<small>WRESTLING</small></div>
+      </header>
+      <div class="mbody">
+        <div class="homebar"><span class="dot"></span><span class="homeword">HOME</span>
+          <label class="nametag">WRESTLER <input class="field" id="pname" maxlength="16" placeholder="Guest" value="${esc(s.name)}" /></label>
+        </div>
+        <div class="tilewrap">
+          ${tileHTML(feat, 'feat')}
+          <div class="tilegrid">${tiles.map((t) => tileHTML(t)).join('')}</div>
+        </div>
+        <div class="minirow">${mini.map((m) => `<button class="mbtn" data-a="${m.a}">${m.label}</button>`).join('')}</div>
       </div>
-      <div class="spot"><div class="dim">SELECTED WRESTLER</div><div class="nm">${esc(c.name)}</div><div class="dim">${esc(c.tagline)}</div></div>
       <div class="foot dim">WASD move · J punch · K kick · E grab · F interact · X special · H controls</div></div>`);
     e.querySelector('#pname').addEventListener('change', (ev) => this.settings.set({ name: ev.target.value.trim().slice(0, 16) }));
     e.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => { this.settings.set({ name: e.querySelector('#pname').value.trim().slice(0, 16) }); h[b.dataset.a]?.(); }));
