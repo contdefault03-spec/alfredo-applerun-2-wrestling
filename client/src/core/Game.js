@@ -658,7 +658,12 @@ export class Game {
           if (e.heavy) { cam.punch(e.special ? 6 : 2.5); this.renderer.impactFlash(e.special ? 0.35 : 0.12); }
           C.react('pop', e.crowd ?? 0.1); A.crowdPop((e.crowd ?? 0.1) * 0.8);
           if (p && (involved(e) || e.heavy)) this.damageNumber(p, e.damage);
-          if (p && e.damage >= 70 && this.settings.get().gore !== false) this.bloodHit(p, Math.min(1.5, e.damage / 90)); // hurt badly → blood
+          // blood ACCUMULATES: the more beaten up they already are, the more they bleed
+          if (p && this.settings.get().gore !== false) {
+            const vic = byId.get(e.victim);
+            const lvl = vic?.bloodLvl || 0;
+            if (e.damage >= 70 || lvl > 0.35) this.bloodHit(p, Math.min(2.2, e.damage / 90 + lvl * 1.2));
+          }
           break;
         }
         case 'block': A.play('block', p); E.burst(p, { n: 6, speed: 2, color: [0.6, 0.8, 1], size: 0.06, life: 0.2 }); break;

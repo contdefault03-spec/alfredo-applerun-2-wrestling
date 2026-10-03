@@ -134,6 +134,31 @@ export class Animator {
     return run;
   }
 
+  /**
+   * Visible damage: a hurt leg makes them limp (dip + stiff stride on that side),
+   * a hurt arm hangs loose at the side instead of being held up in guard.
+   */
+  injuryPose(t, v) {
+    const leg = v.injLeg || 0, arm = v.injArm || 0;
+    if (leg > 0.3) {
+      const k = Math.min(1, (leg - 0.3) / 0.7);
+      const ph = Math.sin((v.runTime || 0) * 7.0);        // in step with the walk cycle
+      add(t, 'hipsOff', [0, -0.06 * k * Math.max(0, ph), 0]);   // dip onto the bad leg
+      add(t, 'tilt', [0, 0.09 * k]);                             // list to one side
+      add(t, 'kneeR', [0, 0, -0.45 * k]);                        // stiff knee
+      add(t, 'footR', [-0.12 * k, 0, 0]);                        // dragging foot
+      add(t, 'spine', [0.1 * k, 0, 0]);
+    }
+    if (arm > 0.3) {
+      const k = Math.min(1, (arm - 0.3) / 0.7);
+      // let the arm fall out of guard and hang
+      const cur = [t[P.handR], t[P.handR + 1], t[P.handR + 2]];
+      set(t, 'handR', [cur[0] * (1 - k), cur[1] * (1 - k) - 0.55 * k, cur[2] * (1 - k) + 0.08 * k]);
+      add(t, 'elbowR', [0.25 * k, -0.2 * k, 0]);
+      add(t, 'chest', [0, -0.12 * k, 0]);                        // shoulder drops
+    }
+  }
+
   breathe(t, amt = 1) {
     const b = Math.sin(this.time * 2.2) * amt;
     add(t, 'chest', [-0.02 * b, 0, 0]);
@@ -178,6 +203,7 @@ export class Animator {
         this.locomotion(t, v, dt, v.relaxed ? RELAXED : this.G);
         this.breathe(t);
         handsForItem(t);
+        this.injuryPose(t, v);
         return 26;
       }
       case S.BLOCK: {

@@ -26,7 +26,8 @@ export function stepLocomotion(f, input, dt, arena, targetPos = null) {
   const blocking = f.state === S.BLOCK;
   const wantRun = (input.held & BTN.RUN) && mag > 0.2 && !blocking && f.stamina > 1;
   const lowStam = f.stamina < 15 ? 0.8 : 1;
-  const speed = blocking ? c.walkSpeed * 0.35 : wantRun ? c.runSpeed * lowStam : c.walkSpeed * lowStam;
+  const legHurt = 1 - (f.injLeg || 0) * 0.4;   // a damaged leg slows you down (limp)
+  const speed = (blocking ? c.walkSpeed * 0.35 : wantRun ? c.runSpeed * lowStam : c.walkSpeed * lowStam) * legHurt;
   const tvx = mx * speed * mag, tvz = mz * speed * mag;
   const acc = c.acceleration * (f.onGround ? 1 : 0.25);
   const k = Math.min(1, acc * dt / Math.max(0.5, speed));

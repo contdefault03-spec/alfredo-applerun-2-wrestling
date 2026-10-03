@@ -31,6 +31,8 @@ export function createFighter({ id, charId, team = 0, name, isAI = false, diffic
     underRing: false, underRingT: 0, // fallen through a broken ring section
     noFall: 0,                       // brief immunity from falling through the ring
     refHeat: 0, refHeatT: -99,       // "attacking a downed foe" heat for ref interference
+    injLeg: 0, injArm: 0,            // accumulated limb damage (0..1): limp / dead arm
+    bloodLvl: 0,                     // accumulated blood (0..1) – builds, never resets mid-match
     outside: false,                  // vaulted beyond the ringside barricade
     legal: true,             // tag-team legality
     input: { mx: 0, mz: 0, held: 0, pressed: 0, seq: 0 },

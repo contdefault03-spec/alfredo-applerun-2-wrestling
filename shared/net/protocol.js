@@ -22,7 +22,8 @@ export function encodeFighter(f) {
   const flags = (f.onGround ? 1 : 0) | (f.hidden ? 2 : 0) | (f.eliminated ? 4 : 0) | (f.legal ? 8 : 0) | (f.invuln > 0 ? 16 : 0) | (f.ateFood ? 32 : 0) | (f.underRing ? 64 : 0) | (f.outside ? 128 : 0);
   return [f.id, r3(f.x), r3(f.y), r3(f.z), r3(f.yaw), r2(f.vx), r2(f.vy), r2(f.vz), STATE_CODE[f.state] ?? 0, r3(f.stateTime), r3(f.stateDur),
     f.move || 0, typeof f.sub === 'number' ? f.sub : 0, Math.round(f.hp), Math.round(f.stamina), Math.round(f.meter), r2(Math.max(0, f.specialCd)),
-    f.item ?? -1, ZONES.indexOf(f.zone), flags, r2(f.tilt || 0), f.target ?? -1, Math.round(f.runTime * 100) / 100];
+    f.item ?? -1, ZONES.indexOf(f.zone), flags, r2(f.tilt || 0), f.target ?? -1, Math.round(f.runTime * 100) / 100,
+    r2(f.injLeg || 0), r2(f.injArm || 0), r2(f.bloodLvl || 0)];
 }
 
 export function decodeFighter(a, prev = null) {
@@ -32,6 +33,7 @@ export function decodeFighter(a, prev = null) {
   o.hp = a[13]; o.stamina = a[14]; o.meter = a[15]; o.specialCd = a[16]; o.item = a[17] >= 0 ? a[17] : null; o.zone = ZONES[a[18]] || 'ring';
   const fl = a[19]; o.onGround = !!(fl & 1); o.hidden = !!(fl & 2); o.eliminated = !!(fl & 4); o.legal = !!(fl & 8); o.invuln = fl & 16 ? 1 : 0; o.ateFood = !!(fl & 32); o.underRing = !!(fl & 64); o.outside = !!(fl & 128);
   o.tilt = a[20]; o.target = a[21] >= 0 ? a[21] : null; o.runTime = a[22];
+  o.injLeg = a[23] || 0; o.injArm = a[24] || 0; o.bloodLvl = a[25] || 0;
   return o;
 }
 
