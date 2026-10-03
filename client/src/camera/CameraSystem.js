@@ -52,7 +52,9 @@ export class CameraSystem {
     const cam = this.cam;
     if (menu) return this.menuShot(dt, menu);
     if (this.cine && this.cineShot(dt)) return;
-    if (!me) return;
+    // No local wrestler to follow (KO'd / eliminated / spectating): never freeze the
+    // camera wherever it happened to be – fall back to a usable broadcast shot.
+    if (!me) { this.spectate(dt, { fighters: [], view: 'ringside' }); return; }
     const s = this.settings.get();
     // input look
     if (look && (look.dx || look.dy)) {
@@ -89,6 +91,84 @@ export class CameraSystem {
     const want = new THREE.Vector3(this.focus.x - fx * this.dist * cp, this.focus.y + this.dist * sp + 0.6, this.focus.z - fz * this.dist * cp);
     this.clampPosition(want);
     this.pos.lerp(want, Math.min(1, dt * 7));
+    this.apply(dt, this.focus);
+  }
+
+  // ── Spectator / broadcast cameras ───────────────────────────────────────────
+  // Used when you're out of the match (KO'd / eliminated) or watching an AI-only
+  // show. Never leaves the camera stranded: every preset resolves to a real shot.
+  static SPECTATOR_VIEWS = ['follow', 'ringside', 'overhead', 'entrance', 'crowd', 'cinematic', 'free'];
+
+  /**
+   * @param {object} o
+   *   fighters  live fighters to frame
+   *   view      one of SPECTATOR_VIEWS
+   *   look      {dx,dy} mouse delta (free cam / manual orbit)
+   *   move      {x,y,z} free-cam movement in camera space (-1..1), y = up/down
+   */
+  spectate(dt, { fighters = [], view = 'follow', look = null, move = null } = {}) {
+    this.time += dt;
+    const R = ARENA.ring;
+    const live = fighters.filter((f) => f && !f.hidden && !f.eliminated);
+    // centre of the action (fall back to the ring so we are never aimed at nothing)
+    const c = new THREE.Vector3(0, R.height + 1, 0);
+    if (live.length) {
+      c.set(0, 0, 0);
+      for (const f of live) c.add(_v.set(f.x, f.y + (f.c?.height || 1.8) * 0.55, f.z));
+      c.multiplyScalar(1 / live.length);
+    }
+    let spread = 0;
+    for (const f of live) spread = Math.max(spread, Math.hypot(f.x - c.x, f.z - c.z));
+
+    if (look && (look.dx || look.dy)) {
+      const sN = this.settings.get();
+      this.yaw -= look.dx * 0.0035 * sN.mouseSens;
+      this.pitch = Math.max(-0.6, Math.min(1.25, this.pitch + look.dy * 0.0025 * sN.mouseSens * (sN.invertY ? -1 : 1)));
+    }
+
+    if (view === 'free') {
+      // full fly-cam: WASD in camera space, Shift = fast, Ctrl = down
+      const sp = (move?.fast ? 16 : 6) * dt;
+      const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+      if (move) {
+        this.pos.x += (fx * move.z + fz * move.x) * sp;
+        this.pos.z += (fz * move.z - fx * move.x) * sp;
+        this.pos.y += (move.y || 0) * sp;
+      }
+      this.pos.y = Math.max(0.4, Math.min(28, this.pos.y));
+      const cp = Math.cos(this.pitch), sp2 = Math.sin(this.pitch);
+      const aim = new THREE.Vector3(this.pos.x + fx * cp * 6, this.pos.y - sp2 * 6, this.pos.z + fz * cp * 6);
+      this.cam.position.copy(this.pos);
+      this.apply(dt, aim);
+      return;
+    }
+
+    // cinematic cycles the fixed shots on a slow timer
+    let v = view;
+    if (view === 'cinematic') {
+      const order = ['ringside', 'follow', 'overhead', 'crowd', 'entrance'];
+      v = order[Math.floor(this.time / 6) % order.length];
+    }
+
+    let want = new THREE.Vector3(), aim = c.clone();
+    if (v === 'ringside') {
+      want.set(5.2, R.height + 1.5, 5.6); aim.y = R.height + 1.0;
+    } else if (v === 'overhead') {
+      want.set(0.01, 13.5, 0.01); aim.copy(c); aim.y = R.height;
+    } else if (v === 'entrance') {
+      want.set(0, 3.4, 13.5); aim.y = R.height + 1.1;
+    } else if (v === 'crowd') {
+      want.set(-9.5, 6.2, -8.5); aim.y = R.height + 0.8;
+    } else { // 'follow' – broadcast side angle on the action
+      const d = Math.max(6.5, Math.min(14, 7 + spread * 0.9));
+      const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+      want.set(c.x - fx * d * 0.82, c.y + d * 0.42 + 0.8, c.z - fz * d * 0.82);
+    }
+    this.clampPosition(want);
+    const k = Math.min(1, dt * (v === 'follow' ? 2.6 : 1.6));
+    this.pos.lerp(want, k);
+    this.focus.lerp(aim, Math.min(1, dt * 3));
+    this.cam.position.copy(this.pos);
     this.apply(dt, this.focus);
   }
 

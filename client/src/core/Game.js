@@ -61,7 +61,17 @@ export class Game {
       this.audio.applyVolumes();
     });
     this.input.on('pause', () => this.togglePause());
-    this.input.on('camera', () => { if (this.state === 'match') this.ui.feed('Camera: ' + (this.camera.toggleMode() === 'auto' ? 'Broadcast' : 'Free')); });
+    this.input.on('camera', () => {
+      if (this.state !== 'match') return;
+      if (this.spectator) {   // spectating: V cycles the broadcast cameras
+        const views = CameraSystem.SPECTATOR_VIEWS;
+        this.spectator.i = (this.spectator.i + 1) % views.length;
+        this.spectator.view = views[this.spectator.i];
+        this.ui.feed('Camera: ' + this.spectator.view.toUpperCase() + (this.spectator.view === 'free' ? ' — WASD move, Shift fast, Space/C up-down' : ''));
+        return;
+      }
+      this.ui.feed('Camera: ' + (this.camera.toggleMode() === 'auto' ? 'Broadcast' : 'Free'));
+    });
     this.input.on('help', () => this.ui.toggleHelp());
     this.input.on('confirm', () => { if (this.state === 'match' && this.session && ['finished', 'over'].includes(this.session.view().match.phase)) this.showResults(this.endInfo || { winners: this.session.view().match.winners, method: this.session.view().match.method }); });
     this.wireNet();
@@ -140,6 +150,7 @@ export class Game {
       play: () => this.quickPlay(),
       multiplayer: () => this.onlineQuick(),
       friend: () => this.friendMenu(),
+      watch: () => this.startWatchShow(),
       tournament: () => this.startTournament(),
       championship: () => this.setupMenu('championship'),
       vsai: () => this.setupMenu('normal'),
@@ -147,6 +158,17 @@ export class Game {
       chars: () => this.charSelect(() => this.showMainMenu()),
       settings: () => this.ui.showSettings({ onBack: () => this.ui.unmount('settings') }),
     });
+  }
+
+  /** Watch-AI broadcast: pick a random card and just watch it, cinematic cameras on. */
+  startWatchShow() {
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    const mode = pick(['normal', 'items', 'cell', 'championship']);
+    const roster = [...CHARACTER_IDS];
+    const a = pick(roster), rest = roster.filter((c) => c !== a);
+    const bList = [{ charId: pick(rest), team: 1, difficulty: this.settings.get().difficulty || 'hard' }];
+    this.ui.clearMenus();
+    this.startLocalMatch(mode, bList, a, { watch: true });
   }
 
   // ── Tournament: three rounds, random opponents + match types, belt for the winner ──
@@ -204,10 +226,11 @@ export class Game {
   }
 
   // ── local match ───────────────────────────────────────
-  startLocalMatch(mode, slots, charOverride) {
+  startLocalMatch(mode, slots, charOverride, { watch = false } = {}) {
     const s = this.settings.get();
     const me = charOverride || s.lastChar;
-    const fighters = [{ charId: me, team: 0, name: s.name || getCharacter(me).name, isAI: false }, ...slots.map((sl) => ({ charId: sl.charId, team: sl.team, isAI: true, difficulty: sl.difficulty }))];
+    this.aiOnly = !!watch;   // broadcast / watch-AI show: nobody is player-controlled
+    const fighters = [{ charId: me, team: 0, name: s.name || getCharacter(me).name, isAI: !!watch, difficulty: watch ? (s.difficulty || 'normal') : undefined }, ...slots.map((sl) => ({ charId: sl.charId, team: sl.team, isAI: true, difficulty: sl.difficulty }))];
     this.lastLocal = { mode, slots, charOverride };
     const session = new LocalSession({ mode, fighters, entrances: true }, 1);
     this.beginMatch(session);
@@ -255,6 +278,7 @@ export class Game {
   endMatchCleanup() {
     this.entranceDir?.stop();
     this._winnerMedia = false; this.entranceDir?.stopWinner();
+    this.aiOnly = false; this.spectator = null;
     this.clearGore();
     this.clearBelt();
     this.restoreReferee();
@@ -507,6 +531,8 @@ export class Game {
       const idx = Math.min(order.length - 1, Math.floor(t / (4.2 / Math.max(1, order.length))));
       const f = order[idx];
       if (f) this.camera.update(dt, { menu: { kind: 'showcase', subject: { x: f.x, y: f.y, z: f.z, height: f.c.height }, angle: f.yaw + 0.35 } });
+    } else if (this.updateSpectator(dt, view, byId, me, look, pressed)) {
+      // spectator / broadcast cameras own the view this frame
     } else if (me && (me.state === S.RAFTER || me.state === S.RAFTER_CLIMB || me.state === S.RAFTER_DROP)) {
       // up on the zipline / overhead – pull the camera back and high so you can see the ring below and aim
       this.camera.update(dt, { menu: { kind: 'showcase', subject: { x: me.x, y: 3.2, z: me.z, height: 7 }, angle: 0.5 } });
@@ -524,6 +550,27 @@ export class Game {
     if (!this.session.online && view.match.phase === 'over' && !this.resultsShown) {
       this.showResults({ winners: view.match.winners, method: view.match.method });
     }
+  }
+
+  /**
+   * Broadcast / spectator cameras. Returns true when it has taken over the view:
+   * when the local wrestler is KO'd or eliminated (you're out of the match), or in
+   * an AI-only show. Cycle cameras with V, free-fly with WASD + Shift (fast),
+   * Space/C for up/down.
+   */
+  updateSpectator(dt, view, byId, me, look, pressed) {
+    const out = this.aiOnly || !me || me.eliminated || me.state === S.KO;
+    if (!out) { if (this.spectator) { this.spectator = null; this.ui.setSpectator?.(null); } return false; }
+    if (!this.spectator) {
+      this.spectator = { view: this.aiOnly ? 'cinematic' : 'follow', i: 0 };
+      this.ui.feed(this.aiOnly ? 'Broadcast mode — V to change camera' : 'You are out of the match — spectating (V to change camera)');
+    }
+    const inp = this.input.sample(0);
+    const held = inp.held;
+    const move = { x: inp.mx, z: inp.mz, y: (held & BTN.JUMP ? 1 : 0) - (held & BTN.DODGE ? 1 : 0), fast: !!(held & BTN.RUN) };
+    this.camera.spectate(dt, { fighters: view.fighters, view: this.spectator.view, look, move });
+    this.ui.setSpectator?.(this.spectator.view);
+    return true;
   }
 
   // ── context prompts for the local wrestler ──

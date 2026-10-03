@@ -65,6 +65,7 @@ export class UIManager {
       <button class="btn primary" data-a="play">PLAY</button>
       <button class="btn" data-a="multiplayer">MULTIPLAYER</button>
       <button class="btn" data-a="friend">PLAY WITH FRIEND</button>
+      <button class="btn" data-a="watch">WATCH AI (BROADCAST)</button>
       <button class="btn" data-a="tournament">TOURNAMENT</button>
       <button class="btn" data-a="championship">CHAMPIONSHIP</button>
       <button class="btn" data-a="vsai">VS AI</button>
