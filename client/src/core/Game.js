@@ -19,6 +19,7 @@ import { FighterView } from '../render/FighterView.js';
 import { ItemViews } from '../render/ItemViews.js';
 import { Effects, Confetti } from '../render/Effects.js';
 import { Referee, Commentator, Announcer, RingGirl } from '../render/NPCs.js';
+import { makeBeltMesh } from '../render/Belt.js';
 import { ScreenDirector } from '../render/ScreenDirector.js';
 import { EntranceDirector } from '../render/EntranceDirector.js';
 import { CameraSystem } from '../camera/CameraSystem.js';
@@ -101,6 +102,8 @@ export class Game {
     await Promise.all([
       this.assets.loadProp('ref', 'assets/characters/ref.glb').then((s) => this.skinNPC(this.referee, s)).catch((e) => console.warn('ref.glb', e)),
       this.assets.loadProp('ann', 'assets/characters/ann.glb').then((s) => this.skinNPC(this.announcer, s)).catch((e) => console.warn('ann.glb', e)),
+      this.assets.loadProp('belt', 'assets/characters/belt.glb').catch((e) => console.warn('belt.glb', e)),
+      this.assets.loadProp('belt1', 'assets/characters/belt1.glb').catch((e) => console.warn('belt1.glb', e)),
     ]);
     this.ui.loading(0.95, 'Warming up…');
     this.ui.portraits = makePortraits(this.renderer.renderer, this.assets);
@@ -137,11 +140,37 @@ export class Game {
       play: () => this.quickPlay(),
       multiplayer: () => this.onlineQuick(),
       friend: () => this.friendMenu(),
+      tournament: () => this.startTournament(),
+      championship: () => this.setupMenu('championship'),
       vsai: () => this.setupMenu('normal'),
       modes: () => this.ui.showModes({ onPick: (m) => { this.ui.unmount('modes'); this.setupMenu(m); }, onBack: () => this.ui.unmount('modes') }),
       chars: () => this.charSelect(() => this.showMainMenu()),
       settings: () => this.ui.showSettings({ onBack: () => this.ui.unmount('settings') }),
     });
+  }
+
+  // ── Tournament: three rounds, random opponents + match types, belt for the winner ──
+  startTournament() {
+    const me = this.settings.get().lastChar || 'masked';
+    const others = CHARACTER_IDS.filter((c) => c !== me);
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    const pool = [...others];
+    const modes = ['normal', 'items', 'cell'];
+    const names = ['QUARTER-FINAL', 'SEMI-FINAL', 'FINAL'];
+    const bracket = names.map((name, i) => {
+      const opp = pool.length ? pool.splice(Math.floor(Math.random() * pool.length), 1)[0] : pick(others);
+      return { opp, mode: i === 2 ? 'championship' : pick(modes), name };
+    });
+    this.tournament = { round: 1, rounds: 3, charId: me, bracket };
+    this.ui.clearMenus();
+    this.ui.showBracket({ t: this.tournament, onGo: () => this.startTournamentRound(), onBack: () => { this.tournament = null; this.showMainMenu(); } });
+  }
+
+  startTournamentRound() {
+    const t = this.tournament;
+    if (!t) return;
+    const r = t.bracket[t.round - 1];
+    this.startLocalMatch(r.mode, [{ charId: r.opp, team: 1, difficulty: this.settings.get().difficulty }], t.charId);
   }
 
   charSelect(back, { taken = {}, onPick = null } = {}) {
@@ -227,6 +256,7 @@ export class Game {
     this.entranceDir?.stop();
     this._winnerMedia = false; this.entranceDir?.stopWinner();
     this.clearGore();
+    this.clearBelt();
     this.restoreReferee();
     this.setRingGirls(false);
     this.arena?.resetRingDamage?.();
@@ -274,6 +304,17 @@ export class Game {
     const me = view.fighters.find((f) => f.id === view.localId);
     const winners = view.fighters.filter((f) => (info.winners || []).includes(f.id));
     const stats = info.stats || view.fighters.map((f) => ({ id: f.id, name: f.name, charId: f.charId, team: f.team, damage: f.stats?.damage ?? 0, hits: f.stats?.hits ?? 0, specials: f.stats?.specials ?? 0, hp: f.hp }));
+    // tournament: a win advances the bracket, a loss knocks you out
+    const t = this.tournament;
+    if (t && !this.session.online) {
+      const won = !!me && winners.some((w) => w.team === me.team);
+      if (won && t.round < t.rounds) {
+        t.round++;
+        this.ui.showBracket({ t, onGo: () => this.startTournamentRound(), onBack: () => { this.tournament = null; this.showMainMenu(); } });
+        return;
+      }
+      if (!won) this.tournament = null;   // knocked out of the tournament
+    }
     this.ui.showResults({ modeName: this.session.rules.name, method: info.method, winners, youWon: !!me && winners.some((w) => w.team === me.team), stats }, {
       rematch: this.session.online ? null : () => { const l = this.lastLocal; this.startLocalMatch(l.mode, l.slots, l.charOverride); },
       lobby: this.session.online ? () => { this.net.send({ t: 'backToLobby' }); this.backToLobby(); } : null,
@@ -408,6 +449,7 @@ export class Game {
       this.announcer.update(dt);
       this.commentators.forEach((c) => c.update(dt));
       this.updateRingGirls(dt);
+      this.updateBelt(dt);
       this.screens.update(dt, this.time, this.session?.view?.());
       const cam = this.renderer.camera;
       this.audio.setListener(cam.position, cam.getWorldDirection(new THREE.Vector3()));
@@ -868,6 +910,76 @@ export class Game {
     this.bloodDecals = [];
   }
 
+  /**
+   * Championship belt ceremony: the ring announcer carries it over and hands it to
+   * the champion, who raises it to the crowd, then wears it around the waist (it
+   * stays on the model for the rest of the celebration).
+   */
+  awardBelt(champ, kind = 'belt') {
+    if (!champ || this._belt) return;
+    const src = this.assets.props?.[kind];
+    const view = this.views.get(champ.id);
+    if (!src || !view) return;
+    const mesh = makeBeltMesh(src, { curl: kind === 'belt1' });
+    if (!mesh) return;
+    this.scene.add(mesh);
+    this._belt = { mesh, view, phase: 'handover', t: 0, kind };
+    // announcer brings it to the champ
+    const ax = Math.max(-2.2, Math.min(2.2, champ.x + 1.1));
+    const az = Math.max(-2.2, Math.min(2.2, champ.z - 0.4));
+    this.announcer.goTo(ax, ARENA.ring.height, az, Math.atan2(champ.x - ax, champ.z - az));
+    this.announcer.speak(4.5);
+  }
+
+  updateBelt(dt) {
+    const b = this._belt;
+    if (!b || b.phase === 'worn') return;
+    b.t += dt;
+    const view = b.view, inst = view?.inst;
+    if (!inst) return;
+    const hand = new THREE.Vector3(); view.handWorld('R', hand);
+    if (b.phase === 'handover') {
+      // travels from the announcer's hand across to the champion
+      const from = new THREE.Vector3();
+      const ab = this.announcer?.solver?.b?.hand_R;
+      if (ab) ab.getWorldPosition(from); else from.set(hand.x + 1.2, hand.y, hand.z);
+      const to = hand.clone(); to.y += 0.55;
+      const u = Math.min(1, b.t / 1.5);
+      b.mesh.position.lerpVectors(from, to, u * u * (3 - 2 * u));
+      b.mesh.rotation.y += dt * 1.1;
+      if (u >= 1) {
+        b.phase = 'raise'; b.t = 0;
+        this.ui.banner('CHAMPION!', '', 2200);
+        this.audio.crowdPop?.(1.6); this.crowd?.react?.('celebrate');
+        this.confetti?.start?.(6);
+      }
+    } else if (b.phase === 'raise') {
+      // held high over the head and turned so the plate faces the crowd
+      const head = new THREE.Vector3();
+      if (inst.bones.head) inst.bones.head.getWorldPosition(head); else head.copy(hand).setY(hand.y + 0.8);
+      head.y += 0.55 + Math.sin(b.t * 2.2) * 0.07;
+      b.mesh.position.copy(head);
+      b.mesh.rotation.set(0.25, (view.root?.rotation.y || 0) + Math.sin(b.t * 0.8) * 0.6, 0);
+      if (b.t > 3.2) {
+        // strap it on – parented to the hips so it rides the body from here on
+        b.mesh.removeFromParent();
+        b.mesh.position.set(0, 0.02, 0);
+        b.mesh.rotation.set(0, 0, 0);
+        b.mesh.scale.multiplyScalar(1 / view.scale);
+        inst.bones.hips.add(b.mesh);
+        b.phase = 'worn';
+        this.ui.feed('And the belt is around the waist of the NEW CHAMPION!');
+        this.audio.crowdPop?.(1.3);
+      }
+    }
+  }
+
+  clearBelt() {
+    if (!this._belt) return;
+    try { this._belt.mesh.removeFromParent(); this._belt.mesh.geometry?.dispose?.(); this._belt.mesh.material?.dispose?.(); } catch { /* ignore */ }
+    this._belt = null;
+  }
+
   /** Winner moment: confetti, pyro from the ring posts, announcer declares the winner. */
   celebrationFX(e, byId, view) {
     this.confetti.start(10);
@@ -892,6 +1004,10 @@ export class Game {
       this.announcer.goTo(ax, R.height, az, Math.atan2(-ax, 6 - az));
       this.commentary.announce(line); this.announcer.speak(4.5);
     }, 2200);
+    // title matches (and the tournament final) are crowned with a belt
+    const rules = this.session?.rules;
+    const beltKind = rules?.belt || (this.tournament && this.tournament.round >= this.tournament.rounds ? 'belt' : null);
+    if (beltKind && winners[0]) setTimeout(() => { if (this.state === 'match') this.awardBelt(winners[0], beltKind); }, 3800);
   }
 
   refPos(view) { return new THREE.Vector3(view.referee.x, view.referee.y, view.referee.z); }

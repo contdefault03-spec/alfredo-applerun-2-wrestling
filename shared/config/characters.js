@@ -11,7 +11,7 @@
 
 /** Default values – every character inherits these, then overrides. */
 export const BASE_STATS = {
-  maxHealth: 1000,
+  maxHealth: 1750,
   height: 1.82,            // standing height in metres (model is scaled to this)
   radius: 0.34,            // body collision radius (m)
   weight: 100,             // kg-ish – affects knockback taken & dealt, grab difficulty
@@ -77,7 +77,7 @@ export const CHARACTERS = {
     tagline: 'The Silverback',
     description: 'A colossal gorilla who fights with the food in his left hand. Slow, massive and nearly impossible to knock down.',
     height: 2.2, radius: 0.62, weight: 260,
-    maxHealth: 1350,
+    maxHealth: 2350,
     walkSpeed: 1.9, runSpeed: 4.1, acceleration: 12, turnSpeed: 7,
     jumpStrength: 5.6,
     attackPower: 1.2, attackSpeed: 0.8, defense: 0.12,
@@ -148,7 +148,7 @@ export const CHARACTERS = {
     tagline: 'The Four-Leaf Blur',
     description: 'Tiny, blazing fast and slippery. Weak hits, but he dances around bigger wrestlers and ducks under high attacks.',
     height: 1.08, radius: 0.24, weight: 48,
-    maxHealth: 780,
+    maxHealth: 1400,
     walkSpeed: 3.6, runSpeed: 8.2, acceleration: 40, turnSpeed: 20,
     jumpStrength: 5.8,
     attackPower: 0.62, attackSpeed: 1.45, defense: 0.0,

@@ -65,6 +65,8 @@ export class UIManager {
       <button class="btn primary" data-a="play">PLAY</button>
       <button class="btn" data-a="multiplayer">MULTIPLAYER</button>
       <button class="btn" data-a="friend">PLAY WITH FRIEND</button>
+      <button class="btn" data-a="tournament">TOURNAMENT</button>
+      <button class="btn" data-a="championship">CHAMPIONSHIP</button>
       <button class="btn" data-a="vsai">VS AI</button>
       <button class="btn" data-a="modes">GAME MODES</button>
       <button class="btn" data-a="chars">CHARACTER SELECT</button>
@@ -115,6 +117,30 @@ export class UIManager {
       <div class="dim" style="font-size:13px;margin-top:4px">${m.minFighters}–${m.maxFighters} wrestlers · ${Math.round(m.timeLimit / 60)} min · win by ${m.winBy.join(' / ')}${m.tag ? ' · tag rules' : ''}${m.cage ? ' · steel cell' : ''}</div></div>`; }).join('')}</div></div></div>`);
     e.querySelectorAll('.mode').forEach((m) => m.addEventListener('click', () => onPick(m.dataset.id)));
     e.querySelector('[data-a=back]').onclick = onBack;
+  }
+
+  /** Tournament bracket: shows the 3 rounds, who you face and in what match type. */
+  showBracket({ t, onGo, onBack }) {
+    const rows = t.bracket.map((r, i) => {
+      const n = i + 1;
+      const state = n < t.round ? 'won' : n === t.round ? 'now' : 'next';
+      const tag = state === 'won' ? '✔ WON' : state === 'now' ? '▶ NOW' : 'UPCOMING';
+      const opp = CHARACTERS[r.opp]?.name || r.opp;
+      const mode = GAME_MODES[r.mode]?.name || r.mode;
+      return `<div class="mode" style="opacity:${state === 'next' ? 0.55 : 1};border-color:${state === 'now' ? '#ffd24a' : ''}">
+        <div class="t">${r.name} — ${esc(mode)}</div>
+        <div class="d">${esc(CHARACTERS[t.charId]?.name || t.charId)} vs ${esc(opp)}</div>
+        <div class="dim" style="font-size:13px;margin-top:4px">${tag}</div></div>`;
+    }).join('');
+    const done = t.round > t.bracket.length;
+    const e = this.mount('bracket', `<div class="screen overlay"><div class="center-panel panel">
+      <h2>TOURNAMENT ${done ? '— CHAMPION!' : '· ROUND ' + t.round + ' OF ' + t.bracket.length}</h2>
+      <div class="col">${rows}</div>
+      <div class="row" style="justify-content:flex-end;margin-top:16px">
+        ${onBack ? '<button class="btn small" data-a="back">QUIT</button>' : ''}
+        <button class="btn primary" data-a="go">${done ? 'CELEBRATE' : 'FIGHT'}</button></div></div></div>`);
+    e.querySelector('[data-a=go]').onclick = () => { this.unmount('bracket'); onGo?.(); };
+    const b = e.querySelector('[data-a=back]'); if (b) b.onclick = () => { this.unmount('bracket'); onBack?.(); };
   }
 
   // ── exhibition (vs AI) setup ──

@@ -37,7 +37,7 @@ export class GeminiProvider {
     this.ttsLimiter = new RateLimiter(Number(env.GEMINI_TTS_RPM || 40));
     this.failures = 0; this.openUntil = 0;
     this.log = log;
-    this.voices = ['Puck', 'Kore', 'Fenrir']; // play-by-play, colour, ring announcer
+    this.voices = ['Fenrir', 'Charon', 'Algenib']; // all deep/mature male: play-by-play, colour, ring announcer
     if (this.enabled) log.info?.(`[gemini] AI commentary enabled (model ${this.model}${this.ttsEnabled ? ', TTS ' + this.ttsModel : ''})`);
   }
 
