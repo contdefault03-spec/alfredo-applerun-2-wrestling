@@ -61,14 +61,61 @@ export class RingDestruction {
   isBroken(x, z) { return this.level(this.cellOf(x, z)) === 2; }
   encode() { return this.hits.slice(); }
 
-  /** Register a heavy impact at a position; cracks then breaks the section. */
-  registerImpact(x, z) {
+  /** Orthogonal grid neighbours of a section, clamped to the canvas. */
+  neighbors(k) {
+    const ix = k % RING_GRID, iz = Math.floor(k / RING_GRID), out = [];
+    if (ix > 0) out.push(k - 1);
+    if (ix < RING_GRID - 1) out.push(k + 1);
+    if (iz > 0) out.push(k - RING_GRID);
+    if (iz < RING_GRID - 1) out.push(k + RING_GRID);
+    return out;
+  }
+
+  /** Structural weakness: an unsupported corner/edge section gives way sooner than the centre. */
+  weakness(k) {
+    const ix = k % RING_GRID, iz = Math.floor(k / RING_GRID);
+    const edges = (ix === 0 || ix === RING_GRID - 1 ? 1 : 0) + (iz === 0 || iz === RING_GRID - 1 ? 1 : 0);
+    return edges >= 2 ? 1.5 : edges === 1 ? 1.25 : 1; // corner · edge · centre
+  }
+
+  /**
+   * Register an impact on the section at a position.
+   * - With no `force`: adds exactly one hit (legacy / high-drop accumulation path).
+   * - With a `force`: scales by the section's structural weakness and sends a
+   *   reduced shockwave into neighbours, so heavy slams progressively collapse
+   *   the ring from where they land — edges and corners first.
+   * @returns {number} the section's damage level (0/1/2) after the impact.
+   */
+  registerImpact(x, z, force) {
     const k = this.cellOf(x, z);
-    if (k < 0 || this.hits[k] >= RING_BREAK_HITS) return;
-    this.hits[k]++;
+    if (k < 0 || this.hits[k] >= RING_BREAK_HITS) return this.level(k);
+    if (force == null) {                                  // legacy: exactly +1, no weakness/spread
+      this.hits[k]++;
+      const c = cellCenter(k);
+      if (this.hits[k] === 2) this.world.emit('ring_crack', { cell: k, x: c.x, z: c.z });
+      if (this.hits[k] === RING_BREAK_HITS) this.world.emit('ring_break', { cell: k, x: c.x, z: c.z });
+      return this.level(k);
+    }
+    return this._apply(k, Math.max(0, force) * this.weakness(k), true);
+  }
+
+  /** Apply fractional structural damage to a section, emitting on each level transition. */
+  _apply(k, amt, spread) {
+    if (k < 0 || this.hits[k] >= RING_BREAK_HITS || amt <= 0) return this.level(k);
+    const before = levelFromHits(this.hits[k]);
+    this.hits[k] = Math.min(RING_BREAK_HITS, this.hits[k] + amt);
+    const after = levelFromHits(this.hits[k]);
     const c = cellCenter(k);
-    if (this.hits[k] === 2) this.world.emit('ring_crack', { cell: k, x: c.x, z: c.z });
-    if (this.hits[k] === RING_BREAK_HITS) this.world.emit('ring_break', { cell: k, x: c.x, z: c.z });
+    if (after >= 1 && before < 1) this.world.emit('ring_crack', { cell: k, x: c.x, z: c.z });
+    if (after >= 2 && before < 2) this.world.emit('ring_break', { cell: k, x: c.x, z: c.z });
+    // shockwave: a strong impact weakens adjacent sections but never breaks them outright
+    if (spread && amt >= 1.5) {
+      for (const nk of this.neighbors(k)) {
+        const room = (RING_BREAK_HITS - 1) - this.hits[nk]; // cap neighbours at "cracked", never broken
+        if (room > 0) this._apply(nk, Math.min(amt * 0.4, room), false);
+      }
+    }
+    return after;
   }
 
   update(dt) {

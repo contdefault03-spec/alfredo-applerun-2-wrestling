@@ -261,6 +261,7 @@ export class Game {
     this.audio.stopMusic();
     this.session = session;
     this.state = 'match';
+    this.introT = 0; this.camera.menuT = 0;   // fresh intro/face-off camera timing
     this.applyInputMode();   // mobile: raise the on-screen controls for the match
     this.paused = false;
     this.arena.setMode(session.rules);
@@ -541,12 +542,20 @@ export class Game {
       return; // entrances own the camera / titantron / prompt this frame
     }
     if (view.match.phase === 'intro') {
-      // broadcast intro: cut between the wrestlers while the bell is about to ring
       const order = view.fighters.filter((f) => !f.hidden && f.state !== 'apron');
-      const t = this.introT = (this.introT || 0) + dt;
-      const idx = Math.min(order.length - 1, Math.floor(t / (4.2 / Math.max(1, order.length))));
-      const f = order[idx];
-      if (f) this.camera.update(dt, { menu: { kind: 'showcase', subject: { x: f.x, y: f.y, z: f.z, height: f.c.height }, angle: f.yaw + 0.35 } });
+      this.introT = (this.introT || 0) + dt;
+      const rules = view.rules || this.session.rules;
+      if (rules?.faceOff && order.length >= 2) {
+        // championship presentation: a staredown two-shot (grand intro slowly orbits it)
+        const a = order[0], b = order[1];
+        this.camera.update(dt, { menu: { kind: 'faceoff', grand: !!rules.grandIntro,
+          a: { x: a.x, y: a.y, z: a.z, height: a.c.height }, b: { x: b.x, y: b.y, z: b.z, height: b.c.height } } });
+      } else {
+        // broadcast intro: cut between the wrestlers while the bell is about to ring
+        const idx = Math.min(order.length - 1, Math.floor(this.introT / (4.2 / Math.max(1, order.length))));
+        const f = order[idx];
+        if (f) this.camera.update(dt, { menu: { kind: 'showcase', subject: { x: f.x, y: f.y, z: f.z, height: f.c.height }, angle: f.yaw + 0.35 } });
+      }
     } else if (this.updateSpectator(dt, view, byId, me, look, pressed)) {
       // spectator / broadcast cameras own the view this frame
     } else if (me && (me.state === S.RAFTER || me.state === S.RAFTER_CLIMB || me.state === S.RAFTER_DROP)) {
@@ -758,7 +767,17 @@ export class Game {
         case 'ko': ui.banner('K.O.!', name(e.fighter), 2000); C.react('big'); A.crowdPop(1.2); cam.shake(0.5); this.spawnGore(byId.get(e.fighter)); break;
         case 'elimination': ui.feed(`${name(e.fighter)} has been ELIMINATED`); break;
         case 'bell': A.play('ring_bell', new THREE.Vector3(2.6, 1, -6.3), { times: e.ending ? 3 : 2, volume: 1.2 }); break;
-        case 'match_start': ui.banner('FIGHT!', '', 1100); C.react('pop', 0.8); A.crowdPop(1); this.screens.flash('FIGHT!'); if (this.ringGirls) for (const g of this.ringGirls) g.applaud(4); break;
+        case 'match_start': {
+          const rules = view?.rules || this.session?.rules;
+          if (rules?.grandIntro) {
+            // championship grand intro: stadium pyro volley, confetti burst and a roaring pop at the bell
+            ui.banner('IT IS TIME!', (rules.name || 'CHAMPIONSHIP').toUpperCase(), 1800);
+            this.entranceDir?.pyro?.(); setTimeout(() => this.entranceDir?.pyro?.(), 420);
+            this.confetti?.start?.(4);
+            C.react('celebrate'); C.react('big'); A.crowdPop(1.8); cam.punch(5);
+          } else { ui.banner('FIGHT!', '', 1100); C.react('pop', 0.8); A.crowdPop(1); }
+          this.screens.flash('FIGHT!'); if (this.ringGirls) for (const g of this.ringGirls) g.applaud(4); break;
+        }
         case 'match_end': {
           const w = (e.winners || []).map(name).join(' & ');
           const meF = byId.get(me);

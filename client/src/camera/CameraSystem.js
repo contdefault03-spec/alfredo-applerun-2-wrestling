@@ -216,7 +216,21 @@ export class CameraSystem {
   menuShot(dt, menu) {
     this.menuT += dt;
     let pos, look;
-    if (menu.kind === 'showcase' && menu.subject) {
+    if (menu.kind === 'faceoff' && menu.a && menu.b) {
+      // staredown two-shot: sit ring-side, perpendicular to the line between the
+      // two wrestlers so both are framed, then slowly push in. Grand intro orbits.
+      const a = menu.a, b = menu.b;
+      const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2, my = (a.y + b.y) / 2;
+      const h = Math.max(a.height || 1.8, b.height || 1.8);
+      let dx = b.x - a.x, dz = b.z - a.z; const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
+      let px = -dz, pz = dx; // perpendicular to the staredown line
+      const orbit = menu.grand ? Math.sin(this.menuT * 0.45) * 0.5 : 0;
+      const ca = Math.cos(orbit), sa = Math.sin(orbit);
+      const rx = px * ca - pz * sa, rz = px * sa + pz * ca;
+      const push = (menu.grand ? 6.4 : 5.0) - Math.min(2.0, this.menuT * 0.32); // slow push-in
+      pos = new THREE.Vector3(mx + rx * push, my + h * (menu.grand ? 0.95 : 0.5) + 0.4, mz + rz * push);
+      look = new THREE.Vector3(mx, my + h * 0.55, mz);
+    } else if (menu.kind === 'showcase' && menu.subject) {
       const s = menu.subject; const h = s.height || 1.8;
       const a = menu.angle ?? 0.35;
       const d = 2.6 + h * 1.25;
