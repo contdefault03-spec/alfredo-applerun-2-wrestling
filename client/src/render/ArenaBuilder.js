@@ -70,6 +70,66 @@ export class ArenaView {
     this.buildLights();
     this.buildCage();
     this.buildZipline();
+    this.buildBroadcastCameras();
+  }
+
+  /**
+   * Physical TV broadcast cameras in the moat around the ring: a tripod + pan
+   * head + camera body that tracks the action, each with a cameraman behind it.
+   * Purely decorative world props; aimBroadcast() swings them toward the action.
+   */
+  buildBroadcastCameras() {
+    this.broadcastCams = [];
+    const metal = std({ color: 0x14151b, roughness: 0.5, metalness: 0.7 });
+    const body = std({ color: 0x0b0c10, roughness: 0.6, metalness: 0.3 });
+    const lensMat = std({ color: 0x05060a, roughness: 0.2, metalness: 0.9, emissive: 0x101826, emissiveIntensity: 0.4 });
+    const skin = std({ color: 0x9a6a44, roughness: 0.8 });
+    const shirt = std({ color: 0x1b2744, roughness: 0.8 });
+    // moat positions (between apron 3.7 and barricade ~8), each aimed inward
+    const spots = [
+      { x: 6.4, z: 5.6 }, { x: -6.4, z: 5.6 },   // the two near (hard-cam side) corners
+      { x: 6.4, z: -5.4 }, { x: -6.4, z: -5.4 }, // the two far corners
+    ];
+    for (const s of spots) {
+      const rig = new THREE.Group(); rig.position.set(s.x, 0, s.z); this.group.add(rig);
+      // tripod: three splayed legs + a short column
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2;
+        const leg = add(rig, new THREE.CylinderGeometry(0.03, 0.04, 1.45, 6), metal, { pos: [Math.cos(a) * 0.28, 0.7, Math.sin(a) * 0.28] });
+        leg.rotation.set(Math.cos(a) * 0.22, 0, -Math.sin(a) * 0.22);
+      }
+      add(rig, new THREE.CylinderGeometry(0.06, 0.06, 0.3, 8), metal, { pos: [0, 1.4, 0] });
+      // pan head: yaws/pitches to track the action
+      const head = new THREE.Group(); head.position.set(0, 1.5, 0); rig.add(head);
+      add(head, new THREE.BoxGeometry(0.4, 0.3, 0.6), body);                          // camera body
+      add(head, new THREE.CylinderGeometry(0.11, 0.13, 0.4, 16).rotateX(Math.PI / 2), body, { pos: [0, 0.02, 0.42] }); // lens barrel
+      add(head, new THREE.CylinderGeometry(0.1, 0.1, 0.04, 16).rotateX(Math.PI / 2), lensMat, { pos: [0, 0.02, 0.63] }); // glass
+      add(head, new THREE.BoxGeometry(0.18, 0.1, 0.18), body, { pos: [0, 0.22, -0.1] }); // viewfinder hood
+      const tally = add(head, new THREE.SphereGeometry(0.03, 8, 8), std({ color: 0xff2020, emissive: 0xff2020, emissiveIntensity: 1.2, roughness: 0.4 }), { pos: [0.16, 0.14, 0.2] });
+      // cameraman standing behind the rig
+      const op = new THREE.Group(); op.position.set(0, 0, -0.45); rig.add(op);
+      add(op, new THREE.CylinderGeometry(0.17, 0.2, 0.9, 10), shirt, { pos: [0, 0.95, 0] }); // torso
+      add(op, new THREE.CylinderGeometry(0.13, 0.15, 0.85, 8), std({ color: 0x12131a, roughness: 0.85 }), { pos: [0, 0.42, 0] }); // legs
+      add(op, new THREE.SphereGeometry(0.15, 12, 12), skin, { pos: [0, 1.52, 0.02] }); // head
+      // face the rig toward the ring to start
+      rig.rotation.y = Math.atan2(-s.x, -s.z);
+      this.broadcastCams.push({ rig, head, op, x: s.x, z: s.z });
+    }
+  }
+
+  /** Swing every broadcast camera (and its operator) to track a world point. */
+  aimBroadcast(dt, cx = 0, cz = 0, cy = 1.4) {
+    if (!this.broadcastCams) return;
+    const k = Math.min(1, dt * 3);
+    for (const b of this.broadcastCams) {
+      const dx = cx - b.x, dz = cz - b.z;
+      const yaw = Math.atan2(dx, dz);
+      const dist = Math.hypot(dx, dz) || 1;
+      const pitch = Math.atan2((b.head.position.y + 0) - cy, dist); // tilt down toward lower action
+      b.head.rotation.y += (yaw - b.head.rotation.y) * k;
+      b.head.rotation.x += (pitch - b.head.rotation.x) * k;
+      b.op.rotation.y += (yaw - b.op.rotation.y) * k; // operator turns with the camera
+    }
   }
 
   /** A zipline from a platform in the back stands up over the ring (the overhead-drop route). */
